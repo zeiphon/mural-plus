@@ -113,8 +113,14 @@ export function DrawingScreen({ initialState, onFinished }: Props) {
       </div>
       <p className="text-xs text-gray-500">
         Pausing lifts the pen after the current short move. Resuming puts it back down and carries on from the same
-        spot.
+        spot. Pen too light or too firm? Adjust it under ⚙ without stopping.
       </p>
+      {!state.settings.webWhileDrawing && (
+        <p className="text-xs text-yellow-400">
+          This page is switched off while drawing (in Settings), so it can't show progress. It reconnects when the
+          drawing ends.
+        </p>
+      )}
     </Card>
   )
 }

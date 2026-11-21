@@ -56,6 +56,38 @@ export const goHome = (): Promise<PlusState> => request('POST', '/goHome')
 
 /** Lifts the pen to its up angle (ramped). */
 export const penUp = (): Promise<string> => request('POST', '/penUp')
+export const penDown = (): Promise<string> => request('POST', '/penDown')
+
+/** Steps per second for the rest of the drawing. */
+export const setDrawingSpeed = (speed: number): Promise<PlusState> =>
+  request('POST', '/setDrawingSpeed', { speed: String(speed) })
+
+/**
+ * Nudges the pen's up or down angle, also while drawing. Positive steps make the
+ * down angle firmer and move the up angle further from the wall.
+ */
+export const adjustPen = (which: 'up' | 'down', steps: number): Promise<PlusState> =>
+  request('POST', '/adjustPen', { which, steps: String(steps) })
+
+export interface PenSettingsUpdate {
+  up?: number
+  down?: number
+  min?: number
+  max?: number
+  speed?: number
+  releaseWhenUp?: boolean
+}
+
+export function setPenSettings(update: PenSettingsUpdate): Promise<PlusState> {
+  const body: Record<string, string> = {}
+  for (const [key, value] of Object.entries(update)) {
+    if (value !== undefined) body[key] = typeof value === 'boolean' ? (value ? '1' : '0') : String(value)
+  }
+  return request('POST', '/penSettings', body)
+}
+
+export const setWebWhileDrawing = (enabled: boolean): Promise<PlusState> =>
+  request('POST', '/settings', { webWhileDrawing: enabled ? '1' : '0' })
 
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))

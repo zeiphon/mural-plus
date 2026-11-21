@@ -13,6 +13,7 @@ import {
 } from '../api'
 import { showAlert } from './AlertModal'
 import { Button } from './Button'
+import { PlusSettingsButton } from '../plus/settings/PlusSettingsButton'
 
 interface ToolsModalProps {
   isOpen: boolean
@@ -90,6 +91,7 @@ export function ToolsModal({ isOpen, onClose }: ToolsModalProps) {
             ✕
           </button>
         </div>
+        <PlusSettingsButton />
 
         <div className="space-y-1">
           <div className="flex justify-between items-center">

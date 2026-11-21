@@ -22,6 +22,7 @@ import { OverviewScreen } from './screens/OverviewScreen'
 import { DistanceScreen } from './screens/DistanceScreen'
 import { BeltsScreen } from './screens/BeltsScreen'
 import { DrawingScreen } from './screens/DrawingScreen'
+import { PlusSettingsModal } from './settings/PlusSettingsModal'
 
 type View =
   | 'loading'
@@ -43,6 +44,7 @@ export function PlusApp() {
   const [state, setState] = useState<PlusState | null>(null)
   const [view, setView] = useState<View>('loading')
   const [toolsOpen, setToolsOpen] = useState(false)
+  const [plusSettingsOpen, setPlusSettingsOpen] = useState(false)
 
   // Drawing pipeline state, as in upstream's App.tsx
   const [svgState, setSvgState] = useState<SvgState | null>(null)
@@ -279,16 +281,18 @@ export function PlusApp() {
           ← Overview
         </button>
       )}
-      {settled && (
+      {(settled || view === 'drawing') && (
         <button
-          onClick={() => setToolsOpen(true)}
+          // While drawing, only plus's pen and drawing settings apply, so skip upstream's Tools.
+          onClick={() => (view === 'drawing' ? setPlusSettingsOpen(true) : setToolsOpen(true))}
           className="fixed top-4 right-4 text-gray-400 hover:text-gray-200 transition-colors text-2xl leading-none z-10"
-          aria-label="Open tools"
+          aria-label="Open settings"
         >
           ⚙
         </button>
       )}
       {screen}
+      <PlusSettingsModal isOpen={plusSettingsOpen} onClose={() => setPlusSettingsOpen(false)} />
       {/* Only mounted while not drawing: closing it sends motor stops, which
           Mural rejects while drawing. */}
       {settled && (

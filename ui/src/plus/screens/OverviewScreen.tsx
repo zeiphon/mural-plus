@@ -82,7 +82,9 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Prop
       id: 'pen',
       title: 'Pen',
       done: state.ready.pen,
-      detail: state.ready.pen ? `Calibrated, down angle ${state.pen.down}°` : 'Calibrate with Mural hanging at home',
+      detail: state.ready.pen
+        ? `Calibrated: down ${state.pen.down}°, up ${state.pen.up}°`
+        : 'Calibrate with Mural hanging at home',
       enabled: true,
     },
   ]
