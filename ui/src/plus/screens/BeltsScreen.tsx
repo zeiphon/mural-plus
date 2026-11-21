@@ -44,20 +44,29 @@ export function BeltsScreen({ state, onDone }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // The release may never arrive if the page loses focus or is hidden, so end the boost then too.
+  // Retracting ends with the motors stalling against the stops, so nothing here
+  // should keep running unwatched: stop both belts (and the boost) if the page
+  // loses focus or is hidden, for example when the phone locks.
   useEffect(() => {
-    if (!boosting) return
-    const onVisibility = () => {
-      if (document.hidden) stopBoost()
+    if (!leftOn && !rightOn) return
+    const stopAll = () => {
+      stopBoost()
+      setLeftOn(false)
+      setRightOn(false)
+      leftStop().catch(() => {})
+      rightStop().catch(() => {})
     }
-    window.addEventListener('blur', stopBoost)
+    const onVisibility = () => {
+      if (document.hidden) stopAll()
+    }
+    window.addEventListener('blur', stopAll)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
-      window.removeEventListener('blur', stopBoost)
+      window.removeEventListener('blur', stopAll)
       document.removeEventListener('visibilitychange', onVisibility)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boosting])
+  }, [leftOn, rightOn])
 
   // Nothing left to speed up
   useEffect(() => {
@@ -185,6 +194,7 @@ export function BeltsScreen({ state, onDone }: Props) {
             </button>
             <p className="text-xs text-gray-500">
               For long retractions. Let go before the loops reach the screws, so the motors stall at the normal speed.
+              The belts stop if you leave this page or lock the phone.
             </p>
           </div>
           <p className="text-xs text-gray-500">
