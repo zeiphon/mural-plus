@@ -11,7 +11,18 @@ namespace plus {
 // power off, the motors let go and Mural slides down the wall.
 class Persist {
     public:
+    // Also counts the boot and records why the board restarted.
     void begin();
+
+    // Boots so far, and the reasons for the most recent restarts (esp_reset_reason
+    // values), newest first. Returns how many reasons were written to `out`.
+    uint32_t getBootCount() { return bootCount; }
+    int getResetHistory(uint8_t *out, int max);
+    static const char *resetReasonName(int reason);
+
+    // Writes a line per drawing command to the Diagnostics log (off by default).
+    bool getLogDrawingMoves() { return logDrawingMoves; }
+    void setLogDrawingMoves(bool enabled);
 
     PenSettings loadPenSettings();
     void savePenSettings(const PenSettings &settings);
@@ -35,6 +46,10 @@ class Persist {
     private:
     Preferences prefs;
     bool webWhileDrawing = true;
+    bool logDrawingMoves = false;
+    uint32_t bootCount = 0;
+    static const int RESET_HISTORY = 8;
+    uint8_t resetHistory[RESET_HISTORY] = {0};
     int topDistance = -1;
     int drawingTopDistance = -1;
     uint32_t drawingSize = 0;

@@ -1,4 +1,5 @@
 #include "plus_pen.h"
+#include "logger.h"
 #include <Arduino.h>
 #include "persist.h"
 
@@ -15,7 +16,7 @@ PlusPen::PlusPen(const PenSettings &initial) {
     pendingMove = true;
     busy = true;
     holdOffUntilMs = millis() + BOOT_HOLDOFF_MS;
-    Serial.printf("Pen: up=%d down=%d limits=%d..%d speed=%d deg/s releaseWhenUp=%d\n",
+    Log.printf("Pen: up=%d down=%d limits=%d..%d speed=%d deg/s releaseWhenUp=%d\n",
                   settings.upAngle, settings.downAngle, settings.minAngle, settings.maxAngle,
                   settings.speedDegPerSec, settings.releaseWhenUp);
 }
@@ -45,7 +46,7 @@ void PlusPen::writeAngle(int angle) {
 void PlusPen::setTarget(int angle, Position newPosition) {
     int clamped = clamp(angle);
     if (clamped != angle) {
-        Serial.printf("Pen: %d deg clamped to %d (limits %d..%d)\n", angle, clamped, settings.minAngle, settings.maxAngle);
+        Log.printf("Pen: %d deg clamped to %d (limits %d..%d)\n", angle, clamped, settings.minAngle, settings.maxAngle);
     }
     targetAngle = clamped;
     position = newPosition;
@@ -63,7 +64,7 @@ void PlusPen::up() {
 
 void PlusPen::down() {
     if (!isCalibrated()) {
-        Serial.println("Pen: down requested but the pen isn't calibrated, ignoring");
+        Log.println("Pen: down requested but the pen isn't calibrated, ignoring");
         return;
     }
     setTarget(settings.downAngle, Position::Down);
@@ -112,7 +113,7 @@ void PlusPen::applyRequestedAngles() {
     int up = requestedUp.exchange(-1);
     if (up >= 0 && up != settings.upAngle) {
         if (upBaseline < 0) upBaseline = settings.upAngle;
-        Serial.printf("Pen: up angle %d -> %d deg\n", settings.upAngle, up);
+        Log.printf("Pen: up angle %d -> %d deg\n", settings.upAngle, up);
         settings.upAngle = up;
         if (position == Position::Up) {
             setTarget(up, Position::Up);
@@ -121,7 +122,7 @@ void PlusPen::applyRequestedAngles() {
     int down = requestedDown.exchange(-1);
     if (down >= 0 && down != settings.downAngle) {
         if (downBaseline < 0) downBaseline = settings.downAngle;
-        Serial.printf("Pen: down angle %d -> %d deg\n", settings.downAngle, down);
+        Log.printf("Pen: down angle %d -> %d deg\n", settings.downAngle, down);
         settings.downAngle = down;
         if (position == Position::Down) {
             setTarget(down, Position::Down);
@@ -139,7 +140,7 @@ void PlusPen::saveAdjustments() {
     applyRequestedAngles();
     if (upBaseline >= 0 || downBaseline >= 0) {
         save();
-        Serial.printf("Pen: adjusted angles saved (up %d, down %d deg)\n", settings.upAngle, settings.downAngle);
+        Log.printf("Pen: adjusted angles saved (up %d, down %d deg)\n", settings.upAngle, settings.downAngle);
     }
 }
 
@@ -147,10 +148,10 @@ void PlusPen::setDownAngle(int angle) {
     requestedDown.store(-1); // a calibration replaces any adjustment
     settings.downAngle = clamp(angle);
     if (settings.downAngle == settings.upAngle) {
-        Serial.printf("Pen: warning, down angle %d is the same as the up angle\n", settings.downAngle);
+        Log.printf("Pen: warning, down angle %d is the same as the up angle\n", settings.downAngle);
     }
     save();
-    Serial.printf("Pen: down angle calibrated to %d deg\n", settings.downAngle);
+    Log.printf("Pen: down angle calibrated to %d deg\n", settings.downAngle);
 }
 
 void PlusPen::clearCalibration() {
@@ -158,7 +159,7 @@ void PlusPen::clearCalibration() {
     settings.downAngle = -1;
     save();
     up();
-    Serial.println("Pen: calibration reset");
+    Log.println("Pen: calibration reset");
 }
 
 void PlusPen::applySettings(const PenSettings &newSettings) {
@@ -174,7 +175,7 @@ void PlusPen::applySettings(const PenSettings &newSettings) {
         settings.downAngle = clamp(settings.downAngle);
     }
     save();
-    Serial.printf("Pen settings saved: up=%d down=%d limits=%d..%d speed=%d releaseWhenUp=%d\n",
+    Log.printf("Pen settings saved: up=%d down=%d limits=%d..%d speed=%d releaseWhenUp=%d\n",
                   settings.upAngle, settings.downAngle, settings.minAngle, settings.maxAngle,
                   settings.speedDegPerSec, settings.releaseWhenUp);
     // Follow the new angles, and keep the servo inside the (possibly narrower) limits.
@@ -192,16 +193,33 @@ void PlusPen::update() {
 
     applyRequestedAngles();
 
+    if (releaseRequested.exchange(false) && !pendingMove) { // a newer move wins
+        ramping = false;
+        busy = false;
+        moveInProgress = false;
+        position = Position::Other; // the horn is free to move now
+        if (attached) {
+            servo->detach();
+            attached = false;
+        }
+        Log.println("Pen: servo released");
+    }
+
     if (pendingMove) {
         if (!positionKnown && now < holdOffUntilMs) {
             return; // let boot settle before the servo's first pulse
         }
         pendingMove = false;
         busy = true; // re-assert in case a web request raced with the settle step below
+        if (!moveInProgress) {
+            moveInProgress = true;
+            moveFromAngle = positionKnown ? (int)round(currentAngle) : -1;
+            moveStartMs = now;
+        }
         if (!positionKnown) {
             // Where the horn is after boot is unknown, so the first pulse is
             // necessarily a jump. (M4: start from the last saved angle instead.)
-            Serial.printf("Pen: first move after boot, going straight to %d deg\n", (int)targetAngle);
+            Log.printf("Pen: first move after boot, going straight to %d deg\n", (int)targetAngle);
             currentAngle = targetAngle;
             writeAngle(targetAngle);
             positionKnown = true;
@@ -231,10 +249,61 @@ void PlusPen::update() {
 
     if (busy && now >= settleUntilMs) {
         busy = false;
+        if (moveInProgress) {
+            moveInProgress = false;
+            lastMoveFrom = moveFromAngle;
+            lastMoveTo = targetAngle;
+            lastMoveMs = now - moveStartMs;
+            moveCount++;
+        }
         if (settings.releaseWhenUp && position == Position::Up && attached) {
             servo->detach();
             attached = false;
         }
+    }
+
+    // Cycle test: alternate down and up until the count runs out (it ends up).
+    if (!busy && !pendingMove && cycleRemaining.load() > 0) {
+        if (!isCalibrated()) {
+            cycleRemaining.store(0);
+            return;
+        }
+        int left = cycleRemaining.fetch_sub(1) - 1;
+        if (position == Position::Down) {
+            up();
+        } else {
+            down();
+        }
+        if (left == 0) {
+            Log.println("Pen: cycle test finished");
+        }
+    }
+}
+
+void PlusPen::release() {
+    cycleRemaining.store(0);
+    releaseRequested.store(true);
+}
+
+void PlusPen::startCycleTest(int cycles) {
+    Log.printf("Pen: cycle test, %d times down and up\n", cycles);
+    up();
+    cycleRemaining.store(cycles * 2);
+}
+
+void PlusPen::stopTest() {
+    if (cycleRemaining.exchange(0) > 0) {
+        Log.println("Pen: cycle test stopped");
+        up();
+    }
+}
+
+const char *PlusPen::positionName() {
+    switch (position) {
+        case Position::Up: return "up";
+        case Position::Down: return "down";
+        case Position::Other: return "other";
+        default: return "unknown";
     }
 }
 

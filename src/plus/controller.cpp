@@ -1,4 +1,5 @@
 #include "controller.h"
+#include "logger.h"
 #include <SD.h>
 #include <stdexcept>
 #include "ArduinoJson.h"
@@ -38,9 +39,9 @@ Controller::Controller(Movement *movement, PlusPen *pen, PlusRunner *runner, Dis
     }
     if (drawingFileExists && persist.getDrawingTopDistance() > 0 && persist.getDrawingSize() == drawingFileSize) {
         drawingTopDistance = persist.getDrawingTopDistance();
-        Serial.printf("Drawing on the SD card is for a %d mm hanger distance\n", (int)drawingTopDistance);
+        Log.printf("Drawing on the SD card is for a %d mm hanger distance\n", (int)drawingTopDistance);
     } else if (persist.getDrawingTopDistance() > 0) {
-        Serial.println("Drawing on the SD card has changed or gone, choose it again");
+        Log.println("Drawing on the SD card has changed or gone, choose it again");
         persist.clearDrawing();
     }
 }
@@ -88,7 +89,7 @@ void Controller::loop() {
         if (homing) {
             homing = false;
             positionKnown = true;
-            Serial.println("At home position, belt position known");
+            Log.println("At home position, belt position known");
         }
     }
 
@@ -106,25 +107,25 @@ void Controller::loop() {
                 Movement::Point home = movement->getHomeCoordinates();
                 movement->beginLinearTravel(home.x, home.y, moveSpeedSteps);
                 positionedMove = true;
-                Serial.println("Returning home");
+                Log.println("Returning home");
             } catch (const std::exception &e) {
                 positionKnown = false; // beginLinearTravel sets the coordinates before validating them
-                Serial.printf("Return home failed: %s\n", e.what());
+                Log.printf("Return home failed: %s\n", e.what());
             }
         }
         int speed = pendingStartSpeed;
         if (speed > 0) {
             try {
                 runner->start(speed);
-                Serial.printf("Drawing started at speed %d\n", speed);
+                Log.printf("Drawing started at speed %d\n", speed);
                 if (runner->isRunning() && !persist.getWebWhileDrawing()) {
-                    Serial.println("Stopping the web server while drawing (Settings)");
+                    Log.println("Stopping the web server while drawing (Settings)");
                     server->end();
                     serverStopped = true;
                 }
             } catch (const std::exception &e) {
                 snprintf(startError, sizeof(startError), "%s", e.what());
-                Serial.printf("Failed to start drawing: %s\n", e.what());
+                Log.printf("Failed to start drawing: %s\n", e.what());
             }
             pendingStartSpeed = 0;
         }
@@ -139,7 +140,7 @@ void Controller::loop() {
         if (serverStopped) {
             server->begin();
             serverStopped = false;
-            Serial.println("Web server started again");
+            Log.println("Web server started again");
         }
         showHomeScreen();
     }
@@ -191,7 +192,9 @@ void Controller::showHomeScreen() {
 // Same as upstream's PhaseManager::updateFreeKb: the space an upload can use,
 // counting the current drawing, which an upload replaces.
 void Controller::updateStorageInfo() {
-    size_t free = SD.totalBytes() - SD.usedBytes();
+    sdTotalBytes = SD.totalBytes();
+    sdUsedBytes = SD.usedBytes();
+    size_t free = sdTotalBytes - sdUsedBytes;
     drawingFileExists = SD.exists(COMMANDS_PATH);
     drawingFileSize = 0;
     if (drawingFileExists) {
@@ -285,6 +288,7 @@ void Controller::respondWithState(AsyncWebServerRequest *request) {
 
     JsonObject &settingsJson = root.createNestedObject("settings");
     settingsJson["webWhileDrawing"] = persist.getWebWhileDrawing();
+    settingsJson["logDrawingMoves"] = persist.getLogDrawingMoves();
 
     JsonObject &file = root.createNestedObject("drawingFile");
     file["exists"] = (bool)drawingFileExists;
@@ -313,7 +317,7 @@ void Controller::setTopDistance(AsyncWebServerRequest *request) {
         // x/y are relative to the hangers, so with a different distance the
         // coordinates no longer describe where the bot really is.
         positionKnown = false;
-        Serial.println("Hanger distance changed, belt position no longer known");
+        Log.println("Hanger distance changed, belt position no longer known");
     }
     movement->setTopDistance(distance);
     persist.setTopDistance(distance);
@@ -330,7 +334,7 @@ void Controller::setPulleyDiameter(AsyncWebServerRequest *request) {
     if (diameter != movement->getPulleyDiameter() && positionKnown) {
         // Step counts now map to different belt lengths.
         positionKnown = false;
-        Serial.println("Pulley diameter changed, belt position no longer known");
+        Log.println("Pulley diameter changed, belt position no longer known");
     }
     movement->setPulleyDiameter(diameter);
     request->send(200, "text/plain", "OK");
@@ -355,7 +359,7 @@ void Controller::command(AsyncWebServerRequest *request) {
     if (command == "l-ret" || command == "l-ext" || command == "r-ret" || command == "r-ext") {
         if (positionKnown) {
             positionKnown = false;
-            Serial.println("Belts moved by hand, belt position no longer known");
+            Log.println("Belts moved by hand, belt position no longer known");
         }
     }
     // Applied by loop() (updateManualBelts)
@@ -396,14 +400,14 @@ void Controller::calibrationMove(AsyncWebServerRequest *request, bool raise) {
             request->send(200, "text/plain", "0");
             return;
         }
-        Serial.printf("Pen calibration move to %.1f, %.1f\n", current.x, newY);
+        Log.printf("Pen calibration move to %.1f, %.1f\n", current.x, newY);
         float moveTime = movement->beginLinearTravel(current.x, newY, printSpeedSteps);
         positionedMove = true;
         display->showCalibration(current.x, newY);
         request->send(200, "text/plain", String(int(ceil(moveTime)) + 1));
     } catch (const std::exception &e) {
         positionKnown = false; // beginLinearTravel sets the coordinates before validating them
-        Serial.printf("Pen calibration move failed: %s\n", e.what());
+        Log.printf("Pen calibration move failed: %s\n", e.what());
         request->send(500, "text/plain", String("Move failed: ") + e.what());
     }
 }
@@ -419,10 +423,10 @@ void Controller::extendToHome(AsyncWebServerRequest *request) {
         positionKnown = false;
         homing = true;
         positionedMove = true;
-        Serial.println("Extending to home");
+        Log.println("Extending to home");
         request->send(200, "text/plain", String(seconds));
     } catch (const std::exception &e) {
-        Serial.printf("Extend to home failed: %s\n", e.what());
+        Log.printf("Extend to home failed: %s\n", e.what());
         request->send(500, "text/plain", String("Extend to home failed: ") + e.what());
     }
 }
@@ -510,7 +514,7 @@ void Controller::updateManualBelt(ManualBelt &belt, bool left, bool boost) {
         return;
     }
     if (boosted != belt.boosted) {
-        Serial.printf("%s belt: retracting %s\n", left ? "Left" : "Right", boosted ? "faster" : "at normal speed");
+        Log.printf("%s belt: retracting %s\n", left ? "Left" : "Right", boosted ? "faster" : "at normal speed");
     }
     belt.boosted = boosted;
     int speed = boosted ? BOOST_SPEED : printSpeedSteps;
@@ -530,9 +534,9 @@ void Controller::estepsCalibration(AsyncWebServerRequest *request) {
     }
     if (positionKnown) {
         positionKnown = false;
-        Serial.println("E-steps calibration move, belt position no longer known");
+        Log.println("E-steps calibration move, belt position no longer known");
     }
-    Serial.printf("Extending %d mm\n", distanceMm);
+    Log.printf("Extending %d mm\n", distanceMm);
     movement->extendBelts(distanceMm);
     request->send(200, "text/plain", "OK");
 }
@@ -572,14 +576,14 @@ void Controller::handleUpload(AsyncWebServerRequest *request, String filename, s
                 ? strtoul(request->getParam("totalBytes")->value().c_str(), nullptr, 10)
                 : request->contentLength();
             size_t freeBytes = SD.totalBytes() - SD.usedBytes();
-            Serial.printf("Upload size: %u bytes, %u bytes free\n", (unsigned)totalBytes, (unsigned)freeBytes);
+            Log.printf("Upload size: %u bytes, %u bytes free\n", (unsigned)totalBytes, (unsigned)freeBytes);
             if (freeBytes < totalBytes) {
                 uploadErrorCode = 400;
                 uploadError = "Not enough space for upload";
                 return;
             }
             request->_tempFile = SD.open(COMMANDS_PATH, "w");
-            Serial.println("Upload started");
+            Log.println("Upload started");
         } else {
             request->_tempFile = SD.open(COMMANDS_PATH, "r+");
             if (!request->_tempFile || !request->_tempFile.seek(offset)) {
@@ -605,14 +609,14 @@ void Controller::handleUpload(AsyncWebServerRequest *request, String filename, s
             drawingTopDistance = movement->getTopDistance();
             updateStorageInfo();
             persist.setDrawing(drawingTopDistance, drawingFileSize);
-            Serial.println("Upload finished");
+            Log.println("Upload finished");
         }
     }
 }
 
 void Controller::uploadComplete(AsyncWebServerRequest *request) {
     if (uploadErrorCode != 0) {
-        Serial.printf("Upload failed: %s\n", uploadError.c_str());
+        Log.printf("Upload failed: %s\n", uploadError.c_str());
         request->send(uploadErrorCode, "text/plain", uploadError);
         return;
     }
@@ -645,6 +649,7 @@ void Controller::run(AsyncWebServerRequest *request) {
         return;
     }
     int speed = request->hasArg("speed") ? request->arg("speed").toInt() : DEFAULT_SPEED;
+    pen->stopTest(); // a Diagnostics cycle test
     startError[0] = '\0';
     pendingStartSpeed = constrain(speed, MIN_SPEED, MAX_SPEED);
     respondWithState(request);
@@ -655,7 +660,7 @@ void Controller::pauseDrawing(AsyncWebServerRequest *request) {
         request->send(400, "text/plain", "Not drawing");
         return;
     }
-    Serial.println("Pause requested");
+    Log.println("Pause requested");
     runner->requestPause();
     respondWithState(request);
 }
@@ -665,7 +670,7 @@ void Controller::resumeDrawing(AsyncWebServerRequest *request) {
         request->send(400, "text/plain", "Not drawing");
         return;
     }
-    Serial.println("Resume requested");
+    Log.println("Resume requested");
     runner->requestResume();
     respondWithState(request);
 }
@@ -675,7 +680,7 @@ void Controller::stopDrawing(AsyncWebServerRequest *request) {
         request->send(400, "text/plain", "Not drawing");
         return;
     }
-    Serial.println("Stop requested");
+    Log.println("Stop requested");
     runner->requestStop();
     respondWithState(request);
 }
@@ -688,7 +693,7 @@ void Controller::setDrawingSpeed(AsyncWebServerRequest *request) {
     }
     int speed = constrain(request->arg("speed").toInt(), MIN_SPEED, MAX_SPEED);
     runner->setSpeed(speed);
-    Serial.printf("Drawing speed set to %d\n", speed);
+    Log.printf("Drawing speed set to %d\n", speed);
     respondWithState(request);
 }
 
@@ -754,7 +759,12 @@ void Controller::setSettings(AsyncWebServerRequest *request) {
     if (request->hasArg("webWhileDrawing")) {
         String v = request->arg("webWhileDrawing");
         persist.setWebWhileDrawing(v == "1" || v == "true");
-        Serial.printf("Web UI while drawing %s\n", persist.getWebWhileDrawing() ? "on" : "off");
+        Log.printf("Web UI while drawing %s\n", persist.getWebWhileDrawing() ? "on" : "off");
+    }
+    if (request->hasArg("logDrawingMoves")) {
+        String v = request->arg("logDrawingMoves");
+        persist.setLogDrawingMoves(v == "1" || v == "true");
+        Log.printf("Logging drawing moves %s\n", persist.getLogDrawingMoves() ? "on" : "off");
     }
     respondWithState(request);
 }

@@ -22,6 +22,7 @@ import { DistanceScreen } from './screens/DistanceScreen'
 import { BeltsScreen } from './screens/BeltsScreen'
 import { DrawingScreen } from './screens/DrawingScreen'
 import { PenScreen } from './screens/PenScreen'
+import { DiagnosticsScreen } from './screens/DiagnosticsScreen'
 import { PlusSettingsModal } from './settings/PlusSettingsModal'
 
 type View =
@@ -31,6 +32,7 @@ type View =
   | 'belts'
   | 'pen'
   | 'drawing'
+  | 'diagnostics'
   | 'restarting'
   // Choosing a drawing: upstream's screens, in the same order as upstream's App.tsx
   | 'InputSelect'
@@ -45,6 +47,8 @@ export function PlusApp() {
   const [view, setView] = useState<View>('loading')
   const [toolsOpen, setToolsOpen] = useState(false)
   const [plusSettingsOpen, setPlusSettingsOpen] = useState(false)
+  // Where the Diagnostics page goes back to
+  const [returnView, setReturnView] = useState<View>('overview')
 
   // Drawing pipeline state, as in upstream's App.tsx
   const [svgState, setSvgState] = useState<SvgState | null>(null)
@@ -76,7 +80,19 @@ export function PlusApp() {
     refresh()
   }
 
+  function handleOpenDiagnostics() {
+    if (view === 'pen') penUp().catch(() => {})
+    setReturnView(view === 'drawing' ? 'drawing' : 'overview')
+    setView('diagnostics')
+  }
+
   function handleBackToOverview() {
+    if (view === 'diagnostics') {
+      // Back to the drawing if there was one; it moves on to the overview by itself if it has finished.
+      setView(returnView)
+      refresh()
+      return
+    }
     if (view === 'pen') {
       // Don't leave the pen touching the wall
       penUp().catch(() => {})
@@ -178,6 +194,9 @@ export function PlusApp() {
     case 'drawing':
       screen = <DrawingScreen initialState={state} onFinished={handleDrawingFinished} />
       break
+    case 'diagnostics':
+      screen = <DiagnosticsScreen />
+      break
     case 'restarting':
       screen = (
         <Card title="Restarting…">
@@ -253,13 +272,24 @@ export function PlusApp() {
       break
   }
 
-  const settled = view !== 'drawing' && view !== 'UploadProgress' && view !== 'restarting'
+  // While drawing (including Diagnostics opened from the drawing), only plus's
+  // pen and drawing settings apply, and upstream's Tools modal isn't mounted.
+  const duringDrawing = view === 'drawing' || (view === 'diagnostics' && returnView === 'drawing')
+  const settled = !duringDrawing && view !== 'UploadProgress' && view !== 'restarting'
   const footer = (
     <p className="mt-6 text-xs sm:text-sm text-gray-600">
       <a href="https://github.com/nikivanov/mural" className="hover:text-gray-400 transition-colors">
         Mural
       </a>{' '}
       Plus
+      {(settled || view === 'drawing') && view !== 'diagnostics' && (
+        <>
+          {' · '}
+          <button onClick={handleOpenDiagnostics} className="hover:text-gray-400 transition-colors">
+            Diagnostics
+          </button>
+        </>
+      )}
       {settled && (
         <>
           {' · '}
@@ -273,18 +303,17 @@ export function PlusApp() {
 
   return (
     <Page footer={footer}>
-      {settled && view !== 'overview' && (
+      {((settled && view !== 'overview') || view === 'diagnostics') && (
         <button
           onClick={handleBackToOverview}
           className="fixed top-4 left-4 text-sm text-gray-400 hover:text-gray-200 transition-colors z-10"
         >
-          ← Overview
+          {view === 'diagnostics' && returnView === 'drawing' ? '← Drawing' : '← Overview'}
         </button>
       )}
-      {(settled || view === 'drawing') && (
+      {(settled || duringDrawing) && (
         <button
-          // While drawing, only plus's pen and drawing settings apply, so skip upstream's Tools.
-          onClick={() => (view === 'drawing' ? setPlusSettingsOpen(true) : setToolsOpen(true))}
+          onClick={() => (duringDrawing ? setPlusSettingsOpen(true) : setToolsOpen(true))}
           className="fixed top-4 right-4 text-gray-400 hover:text-gray-200 transition-colors text-2xl leading-none z-10"
           aria-label="Open settings"
         >

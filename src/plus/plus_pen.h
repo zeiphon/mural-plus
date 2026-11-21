@@ -66,6 +66,23 @@ class PlusPen {
     const PenSettings &getSettings() { return settings; }
     int getTargetAngle() { return targetAngle; }
 
+    // Diagnostics. Not while drawing.
+    void release();                     // stop the pulses (the servo goes limp); the next move re-attaches
+    void startCycleTest(int cycles);    // lower and lift `cycles` times; needs a calibration
+    void stopTest();
+    int getCycleRemaining() { return cycleRemaining.load(); }
+
+    // Readouts for the Diagnostics page (what was commanded, not measured)
+    bool isAttached() { return attached; }
+    bool isPositionKnown() { return positionKnown; }
+    int getCurrentAngle() { return (int)round(currentAngle); }
+    int getPulseWidthUs() { return attached ? servo->readMicroseconds() : 0; }
+    const char *positionName();
+    unsigned long getMoveCount() { return moveCount; }
+    int getLastMoveFrom() { return lastMoveFrom; }
+    int getLastMoveTo() { return lastMoveTo; }
+    unsigned long getLastMoveMs() { return lastMoveMs; }
+
     private:
     Servo *servo;
     PenSettings settings;
@@ -93,6 +110,17 @@ class PlusPen {
     static const unsigned long BOOT_HOLDOFF_MS = 2000;
     static const unsigned long SETTLE_MS = 200;  // same as upstream's settle delay
     unsigned long holdOffUntilMs = 0;
+
+    // Diagnostics
+    std::atomic<bool> releaseRequested{false};
+    std::atomic<int> cycleRemaining{0};  // moves left in a cycle test
+    bool moveInProgress = false;
+    int moveFromAngle = -1;
+    unsigned long moveStartMs = 0;
+    volatile unsigned long moveCount = 0; // finished moves since boot
+    volatile int lastMoveFrom = -1;
+    volatile int lastMoveTo = -1;
+    volatile unsigned long lastMoveMs = 0; // including the settle time
 
     int clamp(int angle);
     int towardsWall();                  // -1 if lower angles are towards the wall

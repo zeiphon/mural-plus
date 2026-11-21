@@ -1,4 +1,6 @@
 #include "plus_runner.h"
+#include "logger.h"
+#include "persist.h"
 #include <stdexcept>
 #include "tasks/interpolatingmovementtask.h"
 
@@ -71,7 +73,7 @@ void PlusRunner::start(int speed) {
     pausedTotalMs = 0;
     lastOutcome = Outcome::None;
     lastError[0] = '\0';
-    Serial.printf("Total distance to travel: %.1f mm\n", totalDistance);
+    Log.printf("Total distance to travel: %.1f mm\n", totalDistance);
 
     startMs = millis();
     stopped = false;
@@ -141,10 +143,13 @@ Task *PlusRunner::getNextTask() {
         if (line.length() == 0) {
             continue;
         }
+        bool logMoves = persist.getLogDrawingMoves(); // Diagnostics setting
         if (line == "p1") {
+            if (logMoves) Log.note("Pen down\n");
             return new PlusPenTask(false, pen);
         }
         if (line == "p0") {
+            if (logMoves) Log.note("Pen up\n");
             return new PlusPenTask(true, pen);
         }
         int space = line.indexOf(' ');
@@ -153,6 +158,8 @@ Task *PlusRunner::getNextTask() {
             double x = line.substring(0, space).toDouble();
             double y = line.substring(space + 1).toDouble();
             targetPosition = Movement::Point(x, y);
+            // Upstream's task prints its own line to Serial, so this goes to the log only.
+            if (logMoves) Log.note("Move to %.1f, %.1f\n", x, y);
             return new InterpolatingMovementTask(movement, targetPosition, speed);
         }
         // Unknown line: probably a newer upstream command format (see UPSTREAM.md).
@@ -174,7 +181,7 @@ Task *PlusRunner::getNextTask() {
 
 void PlusRunner::fail(const char *message) {
     snprintf(lastError, sizeof(lastError), "%s", message);
-    Serial.printf("Drawing failed: %s\n", message);
+    Log.printf("Drawing failed: %s\n", message);
     finishRun(Outcome::Failed);
 }
 
@@ -198,7 +205,7 @@ void PlusRunner::finishRun(Outcome outcome) {
     stopped = true;
 
     unsigned long s = finishedElapsedMs / 1000;
-    Serial.printf("Drawing %s at %d%% after %lum %lus\n", lastOutcomeName(), getProgress(), s / 60, s % 60);
+    Log.printf("Drawing %s at %d%% after %lum %lus\n", lastOutcomeName(), getProgress(), s / 60, s % 60);
 }
 
 void PlusRunner::run() {
@@ -219,7 +226,7 @@ void PlusRunner::run() {
             if (penWasDown) {
                 pen->up();
             }
-            Serial.printf("Drawing paused at %d%%%s\n", getProgress(), penWasDown ? " (pen lifted)" : "");
+            Log.printf("Drawing paused at %d%%%s\n", getProgress(), penWasDown ? " (pen lifted)" : "");
         }
 
         if (stopRequested) {
@@ -241,7 +248,7 @@ void PlusRunner::run() {
             pen->down();
             resuming = true;
         }
-        Serial.println("Drawing resumed");
+        Log.println("Drawing resumed");
         return;
     }
 
@@ -273,7 +280,7 @@ void PlusRunner::advance() {
         }
         if (progress != newProgress) {
             progress = newProgress;
-            Serial.printf("Progress: %d%%\n", progress);
+            Log.printf("Progress: %d%%\n", progress);
             display->showDrawing(progress);
         }
     }

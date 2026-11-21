@@ -1,11 +1,14 @@
 #include "plus.h"
+#include "logger.h"
 #include <LittleFS.h>
 #include <Preferences.h>
 #include <esp_timer.h>
+#include <esp_system.h>
 #include "plus_pen.h"
 #include "plus_runner.h"
 #include "controller.h"
 #include "persist.h"
+#include "diagnostics.h"
 
 namespace plus {
 
@@ -20,6 +23,7 @@ namespace {
     PlusPen *gPen = nullptr;
     PlusRunner *gRunner = nullptr;
     Controller *gController = nullptr;
+    Diagnostics *gDiagnostics = nullptr;
 
     bool loadClassicMode() {
         Preferences prefs;
@@ -74,7 +78,7 @@ namespace {
                 persist.clearDrawing();
             }
             saveClassicMode(mode == "classic");
-            Serial.printf("Switching to %s mode, restarting\n", mode.c_str());
+            Log.printf("Switching to %s mode, restarting\n", mode.c_str());
             request->send(200, "text/plain", "Restarting");
             restartSoon();
         });
@@ -85,26 +89,31 @@ bool begin(AsyncWebServer *server, Movement *movement, Display *display, bool ho
     bool classic = loadClassicMode();
     registerModeRoutes(server, classic);
     if (classic) {
-        Serial.println("Classic mode (upstream phases)");
+        Log.println("Classic mode (upstream phases)");
         return false;
     }
 
-    Serial.println("Mural Plus mode");
+    // The log keeps what came before a crash or software restart, but not a power-on.
+    int resetReason = esp_reset_reason();
+    Log.begin(Persist::resetReasonName(resetReason), resetReason != ESP_RST_POWERON);
+    Log.printf("Mural Plus mode, firmware %s (built %s %s)\n", MURAL_FW_VERSION, __DATE__, __TIME__);
     gMovement = movement;
     persist.begin();
     gPen = new PlusPen(persist.loadPenSettings());
     gRunner = new PlusRunner(movement, gPen, display);
     gController = new Controller(movement, gPen, gRunner, display, hotspotMode, ipAddress);
+    gDiagnostics = new Diagnostics(movement, gPen, gRunner, gController, hotspotMode);
 
     // API routes first, so polling /getState doesn't make the static handler
     // look for a file on every request.
     gController->registerRoutes(server);
+    gDiagnostics->registerRoutes(server);
     server->serveStatic("/", LittleFS, "/www/").setDefaultFile("index.html").setCacheControl("no-cache");
     server->onNotFound([](AsyncWebServerRequest *request) {
         request->send(404, "text/plain", "Not found");
     });
     server->begin();
-    Serial.println("Server started");
+    Log.println("Server started");
 
     if (hotspotMode) {
         display->showHotspotReady(ipAddress);

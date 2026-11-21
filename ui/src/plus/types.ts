@@ -41,10 +41,79 @@ export interface PlusState extends BackendState {
     isDown: boolean
     moving: boolean
   }
-  settings: { webWhileDrawing: boolean }
+  settings: { webWhileDrawing: boolean; logDrawingMoves: boolean }
   /** topDistance: the hanger distance the drawing was made for, -1 = none */
   drawingFile: { exists: boolean; topDistance: number; compatible: boolean }
   ready: { distance: boolean; position: boolean; pen: boolean; drawing: boolean; all: boolean }
 }
 
 export type SetupStep = 'distance' | 'drawing' | 'belts' | 'pen'
+
+/** GET /diagnostics (src/plus/diagnostics.cpp). Servo values are commanded, not measured. */
+export interface Diagnostics {
+  system: {
+    firmware: string
+    built: string
+    uptimeMs: number
+    bootCount: number
+    /** Newest first */
+    resetHistory: { reason: string; brownout: boolean }[]
+    freeHeap: number
+    minFreeHeap: number
+    maxAllocHeap: number
+    cpuMHz: number
+    hotspot: boolean
+    ip: string
+    wifiRssi?: number
+    status: string
+    drawing: boolean
+    progress: number
+    logDrawingMoves: boolean
+  }
+  servo: {
+    pin: number
+    attached: boolean
+    positionKnown: boolean
+    position: 'up' | 'down' | 'other' | 'unknown'
+    commandedAngle: number
+    targetAngle: number
+    pulseUs: number
+    moving: boolean
+    moveCount: number
+    lastMoveFrom: number
+    lastMoveTo: number
+    lastMoveMs: number
+    cycleRemaining: number
+    upAngle: number
+    downAngle: number
+    minAngle: number
+    maxAngle: number
+    speedDegPerSec: number
+    releaseWhenUp: boolean
+  }
+  motors: {
+    moving: boolean
+    topDistance: number
+    pulleyDiameter: number
+    positionKnown: boolean
+    homing: boolean
+    x?: number
+    y?: number
+    /** -1 retracting, 1 extending, 0 stopped */
+    leftManual: number
+    rightManual: number
+    boosting: boolean
+  }
+  storage: {
+    uiTotalBytes: number
+    uiUsedBytes: number
+    sdTotalBytes: number
+    sdUsedBytes: number
+    drawingExists: boolean
+    drawingBytes: number
+    drawingTopDistance: number
+    drawingReady: boolean
+  }
+}
+
+export type ServoAction = 'up' | 'down' | 'angle' | 'nudge' | 'release' | 'cycle' | 'stop'

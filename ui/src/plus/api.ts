@@ -1,4 +1,4 @@
-import type { PlusState } from './types'
+import type { Diagnostics, PlusState, ServoAction } from './types'
 
 // Plus-only routes. Routes shared with upstream (motor jog, servo, upload, ...)
 // are used through upstream's ../api.ts.
@@ -97,6 +97,22 @@ export function setPenSettings(update: PenSettingsUpdate): Promise<PlusState> {
 
 export const setWebWhileDrawing = (enabled: boolean): Promise<PlusState> =>
   request('POST', '/settings', { webWhileDrawing: enabled ? '1' : '0' })
+
+export const setLogDrawingMoves = (enabled: boolean): Promise<PlusState> =>
+  request('POST', '/settings', { logDrawingMoves: enabled ? '1' : '0' })
+
+export const getDiagnostics = (): Promise<Diagnostics> => request('GET', '/diagnostics')
+
+/** The recent log, oldest line first. */
+export async function getLog(): Promise<string> {
+  const res = await fetch('/log')
+  if (!res.ok) throw new Error(`Couldn't read the log: ${res.status}`)
+  return res.text()
+}
+
+/** Servo test controls on the Diagnostics page. Not while drawing. */
+export const servoAction = (action: ServoAction, value?: number): Promise<string> =>
+  request('POST', '/servo', value === undefined ? { action } : { action, value: String(value) })
 
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))

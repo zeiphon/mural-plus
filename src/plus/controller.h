@@ -21,6 +21,8 @@ namespace plus {
 // Requests arrive on the web server task. Anything that has to wait for the pen
 // or start the runner is handed to loop() on the main task through a flag.
 class Controller {
+    friend class Diagnostics; // reads the controller's state for the Diagnostics page
+
     public:
     Controller(Movement *movement, PlusPen *pen, PlusRunner *runner, Display *display, bool hotspotMode, const String &ipAddress);
     void registerRoutes(AsyncWebServer *server);
@@ -45,6 +47,9 @@ class Controller {
     volatile int drawingTopDistance = -1;  // hanger distance the uploaded drawing was made for, -1 = none
     volatile bool drawingFileExists = false;
     uint32_t drawingFileSize = 0;
+    // SD card usage, cached: the card can't be read from the web task while drawing.
+    uint64_t sdTotalBytes = 0;
+    uint64_t sdUsedBytes = 0;
     volatile int cachedFreeKb = 0;
     char startError[96] = {0};             // why the last drawing failed to start
     bool wasDrawing = false;
