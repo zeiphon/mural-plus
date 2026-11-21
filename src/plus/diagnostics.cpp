@@ -5,6 +5,7 @@
 #include "ArduinoJson.h"
 #include "logger.h"
 #include "persist.h"
+#include "movement_access.h"
 
 namespace plus {
 
@@ -95,6 +96,10 @@ void Diagnostics::handleDiagnostics(AsyncWebServerRequest *request) {
     motors["rightManual"] = controller->rightBelt.dir;
     motors["boosting"] = controller->leftBelt.boosted || controller->rightBelt.boosted;
 
+    JsonArray &drivers = root.createNestedArray("drivers");
+    addDriver(drivers, "Left", true);
+    addDriver(drivers, "Right", false);
+
     JsonObject &storage = root.createNestedObject("storage");
     storage["uiTotalBytes"] = LittleFS.totalBytes();
     storage["uiUsedBytes"] = LittleFS.usedBytes();
@@ -107,6 +112,46 @@ void Diagnostics::handleDiagnostics(AsyncWebServerRequest *request) {
 
     root.printTo(*response);
     request->send(response);
+}
+
+// A TMC2209's status, decoded from its registers (see the TMC2209 datasheet).
+void Diagnostics::addDriver(JsonArray &drivers, const char *name, bool left) {
+    DriverStatus d = MovementAccess::readDriver(movement, left);
+    StepperStatus st = MovementAccess::readStepper(movement, left);
+    JsonObject &o = drivers.createNestedObject();
+    o["name"] = name;
+    o["steps"] = st.position;
+    o["stepsToGo"] = st.distanceToGo;
+    o["stepSpeed"] = st.speed;
+    o["responding"] = d.responding;
+    if (!d.responding) {
+        return;
+    }
+    uint32_t ds = d.drvStatus;
+    auto isSet = [](uint32_t value, int n) { return ((value >> n) & 1) != 0; };
+    o["crcError"] = d.crcError;
+    o["enabled"] = !isSet(d.ioin, 0); // ENN pin, low = enabled
+    o["overtempWarning"] = isSet(ds, 0);
+    o["overtemp"] = isSet(ds, 1);
+    o["shortToGroundA"] = isSet(ds, 2);
+    o["shortToGroundB"] = isSet(ds, 3);
+    o["shortToSupplyA"] = isSet(ds, 4);
+    o["shortToSupplyB"] = isSet(ds, 5);
+    o["openLoadA"] = isSet(ds, 6);
+    o["openLoadB"] = isSet(ds, 7);
+    o["tempAbove"] = isSet(ds, 11) ? 157 : isSet(ds, 10) ? 150 : isSet(ds, 9) ? 143 : isSet(ds, 8) ? 120 : 0;
+    uint8_t cs = (ds >> 16) & 0x1F;
+    o["setCurrentMa"] = d.rmsCurrentMa;
+    // CS_ACTUAL uses the same scale as IRUN, so the ratio gives the current now.
+    o["currentMa"] = (int)(d.rmsCurrentMa * (cs + 1) / (d.irun + 1));
+    o["stealthChop"] = isSet(ds, 30);
+    o["standstill"] = isSet(ds, 31);
+    o["restarted"] = isSet(d.gstat, 0);
+    o["driverError"] = isSet(d.gstat, 1);
+    o["chargePumpUndervoltage"] = isSet(d.gstat, 2);
+    uint8_t mres = (d.chopconf >> 24) & 0x0F;
+    o["microsteps"] = mres <= 8 ? 256 >> mres : 0;
+    o["expectedMicrosteps"] = stepsPerRotation / 200;
 }
 
 void Diagnostics::handleServo(AsyncWebServerRequest *request) {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Toggle } from '../../components/Toggle'
 import { showAlert } from '../../components/AlertModal'
 import { getDiagnostics, getLog, servoAction, setLogDrawingMoves, delay, errorMessage } from '../api'
-import type { Diagnostics, ServoAction } from '../types'
+import type { Diagnostics, MotorDriver, ServoAction } from '../types'
 
 const POLL_MS = 2000
 const LOG_POLL_MS = 3000
@@ -94,6 +94,7 @@ export function DiagnosticsScreen() {
           <ServoSection diag={diag} onAction={act} />
           <SystemSection diag={diag} onLogMoves={toggleLogMoves} />
           <MotorsSection diag={diag} />
+          <DriversSection diag={diag} />
           <StorageSection diag={diag} />
         </>
       )}
@@ -269,6 +270,90 @@ function MotorsSection({ diag }: { diag: Diagnostics }) {
       </Rows>
     </Section>
   )
+}
+
+function DriversSection({ diag }: { diag: Diagnostics }) {
+  const [left, right] = diag.drivers
+  if (!left || !right) return null
+  const rows: { label: string; value: (d: MotorDriver) => ReactNode; always?: boolean }[] = [
+    { label: 'Problems', value: (d) => <DriverProblems driver={d} />, always: true },
+    { label: 'Outputs', value: (d) => (d.enabled ? 'enabled' : 'disabled') },
+    { label: 'Current', value: (d) => `${d.currentMa} mA now, ${d.setCurrentMa} mA set` },
+    { label: 'Temperature', value: (d) => (d.tempAbove ? `over ${d.tempAbove} °C` : 'under 120 °C') },
+    { label: 'Mode', value: (d) => `${d.stealthChop ? 'StealthChop' : 'SpreadCycle'}${d.standstill ? ', standing still' : ''}` },
+    { label: 'Microsteps', value: (d) => d.microsteps },
+    {
+      label: 'Steps',
+      value: (d) => `${d.steps}${d.stepsToGo ? `, ${d.stepsToGo} to go at ${Math.round(Math.abs(d.stepSpeed))}/s` : ''}`,
+      always: true,
+    },
+  ]
+  return (
+    <Section title="Motor drivers">
+      <p className="text-xs text-gray-500">
+        Read from the TMC2209 drivers. "Open load" can show up at standstill or high speed without anything being wrong;
+        it matters if it stays on while the motor turns slowly.
+      </p>
+      <dl className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_minmax(0,3fr)] gap-x-4 gap-y-1.5 text-sm">
+        <dt />
+        <dd className="text-gray-400 font-medium">{left.name}</dd>
+        <dd className="text-gray-400 font-medium">{right.name}</dd>
+        {rows.map((row) => (
+          <DriverRow key={row.label} label={row.label} left={left} right={right} value={row.value} always={row.always} />
+        ))}
+      </dl>
+    </Section>
+  )
+}
+
+function DriverRow(props: {
+  label: string
+  left: MotorDriver
+  right: MotorDriver
+  value: (d: MotorDriver) => ReactNode
+  /** Also shown for a driver that didn't answer */
+  always?: boolean
+}) {
+  const cell = (d: MotorDriver) => (d.responding || props.always ? props.value(d) : '–')
+  return (
+    <>
+      <dt className="text-gray-500">{props.label}</dt>
+      <dd className="text-gray-200 break-words">{cell(props.left)}</dd>
+      <dd className="text-gray-200 break-words">{cell(props.right)}</dd>
+    </>
+  )
+}
+
+function DriverProblems({ driver: d }: { driver: MotorDriver }) {
+  if (!d.responding) {
+    return <span className="text-red-300">Not answering. Check the driver board and the motor power.</span>
+  }
+  const problems: string[] = []
+  if (d.overtemp) problems.push('Overheated, shut down')
+  else if (d.overtempWarning) problems.push('Overheating warning')
+  if (d.shortToGroundA || d.shortToGroundB) problems.push(`Short to ground (coil ${coils(d.shortToGroundA, d.shortToGroundB)})`)
+  if (d.shortToSupplyA || d.shortToSupplyB) problems.push(`Short to supply (coil ${coils(d.shortToSupplyA, d.shortToSupplyB)})`)
+  if (d.driverError) problems.push('Driver error (shut down)')
+  if (d.restarted) problems.push('Restarted since boot, so its settings were lost: check the motor power supply')
+  if (d.chargePumpUndervoltage) problems.push('Charge pump undervoltage')
+  if (d.microsteps !== d.expectedMicrosteps) problems.push(`${d.microsteps} microsteps instead of ${d.expectedMicrosteps}`)
+  if (d.crcError) problems.push('Garbled reply (UART)')
+  const openLoad = d.openLoadA || d.openLoadB
+  if (problems.length === 0 && !openLoad) return <span className="text-emerald-400">none</span>
+  return (
+    <ul className="space-y-0.5">
+      {problems.map((p) => (
+        <li key={p} className="text-red-300">
+          {p}
+        </li>
+      ))}
+      {openLoad && <li className="text-yellow-300">Open load (coil {coils(d.openLoadA, d.openLoadB)})</li>}
+    </ul>
+  )
+}
+
+function coils(a?: boolean, b?: boolean): string {
+  return a && b ? 'A and B' : a ? 'A' : 'B'
 }
 
 function StorageSection({ diag }: { diag: Diagnostics }) {

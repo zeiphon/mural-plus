@@ -9,6 +9,7 @@
 #include "controller.h"
 #include "persist.h"
 #include "diagnostics.h"
+#include "movement_access.h"
 
 namespace plus {
 
@@ -99,6 +100,7 @@ bool begin(AsyncWebServer *server, Movement *movement, Display *display, bool ho
     Log.printf("Mural Plus mode, firmware %s (built %s %s)\n", MURAL_FW_VERSION, __DATE__, __TIME__);
     gMovement = movement;
     persist.begin();
+    MovementAccess::clearDriverFlags(movement); // so the Diagnostics page shows driver restarts since boot
     gPen = new PlusPen(persist.loadPenSettings());
     gRunner = new PlusRunner(movement, gPen, display);
     gController = new Controller(movement, gPen, gRunner, display, hotspotMode, ipAddress);

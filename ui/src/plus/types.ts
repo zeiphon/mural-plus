@@ -104,6 +104,7 @@ export interface Diagnostics {
     rightManual: number
     boosting: boolean
   }
+  drivers: MotorDriver[]
   storage: {
     uiTotalBytes: number
     uiUsedBytes: number
@@ -114,6 +115,37 @@ export interface Diagnostics {
     drawingTopDistance: number
     drawingReady: boolean
   }
+}
+
+/** A TMC2209's status. Only the step fields are there if it didn't answer. */
+export interface MotorDriver {
+  name: string
+  steps: number
+  stepsToGo: number
+  stepSpeed: number
+  responding: boolean
+  crcError?: boolean
+  enabled?: boolean
+  overtempWarning?: boolean
+  overtemp?: boolean
+  shortToGroundA?: boolean
+  shortToGroundB?: boolean
+  shortToSupplyA?: boolean
+  shortToSupplyB?: boolean
+  openLoadA?: boolean
+  openLoadB?: boolean
+  /** The highest temperature threshold passed, °C, or 0 for below 120 °C */
+  tempAbove?: number
+  setCurrentMa?: number
+  currentMa?: number
+  stealthChop?: boolean
+  standstill?: boolean
+  /** Restarted since Mural booted (and lost its settings), e.g. after a motor supply dip */
+  restarted?: boolean
+  driverError?: boolean
+  chargePumpUndervoltage?: boolean
+  microsteps?: number
+  expectedMicrosteps?: number
 }
 
 export type ServoAction = 'up' | 'down' | 'angle' | 'nudge' | 'release' | 'cycle' | 'stop'

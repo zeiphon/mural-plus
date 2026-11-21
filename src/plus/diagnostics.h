@@ -1,6 +1,7 @@
 #ifndef PlusDiagnostics_h
 #define PlusDiagnostics_h
 #include <ESPAsyncWebServer.h>
+#include "ArduinoJson.h"
 #include "movement.h"
 #include "plus_pen.h"
 #include "plus_runner.h"
@@ -14,7 +15,7 @@
 namespace plus {
 
 // Troubleshooting routes for the Diagnostics page (ui/src/plus/screens/DiagnosticsScreen.tsx):
-//   GET  /diagnostics  JSON snapshot: system, servo, motors, storage
+//   GET  /diagnostics  JSON snapshot: system, servo, motors, motor drivers, storage
 //   GET  /log          recent plus log lines, oldest first (text)
 //   POST /servo        action=up|down|angle|nudge|release|cycle|stop [value=], not while drawing
 // The "log drawing moves" setting goes through the controller's /settings.
@@ -31,6 +32,7 @@ class Diagnostics {
     bool hotspotMode;
 
     void handleDiagnostics(AsyncWebServerRequest *request);
+    void addDriver(JsonArray &drivers, const char *name, bool left);
     void handleServo(AsyncWebServerRequest *request);
 };
 

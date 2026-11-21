@@ -17,6 +17,15 @@ Reviewed up to: `1eceffa1f14c30d761a06b45510a966253782e82` (2026-11-21, "Add Dis
 
 The watched files are listed in `scripts/upstream_watch.py`. They are upstream files that plus mode has its own version of (setup phases and routes, runner, pen, UI flow and setup screens), plus files whose behaviour plus relies on: the command-file format in `worker/src/toCommands.ts`, and the backend contract in `ui/src/api.ts` and `ui/src/types.ts`. Changes to shared code that plus uses directly show up as build errors instead.
 
+## Fork-only edits to upstream files
+
+Small edits that stay in this fork, so they can conflict when upstream changes the same lines. The full list, with the reasons, is section 2.2 of `V2_PORT_PLAN.md`.
+
+- `src/main.cpp`: the `plus::begin` and `plus::loop` hooks.
+- `ui/src/main.tsx`: renders `Root`. `ui/src/components/ToolsModal.tsx`: the plus settings button and the Park Servo label.
+- `platformio.ini`, `partitions.csv`: build flags, scripts and the OTA-ready layout.
+- `src/movement.h`: `friend class plus::MovementAccess`, for the motor driver status and step counts on the Diagnostics page. If upstream renames `leftDriver`/`rightDriver`/`leftMotor`/`rightMotor`, `src/plus/movement_access.cpp` stops compiling.
+
 ## Port backlog
 
 | Upstream commit | Files | What changed | Plus status |
