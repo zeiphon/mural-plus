@@ -125,9 +125,12 @@ export function ToolsModal({ isOpen, onClose }: ToolsModalProps) {
           />
         </div>
 
-        <Button onClick={() => setServo(0)} variant="secondary">
-          Park Servo
-        </Button>
+        <div className="space-y-1">
+          <Button onClick={() => setServo(0)} variant="secondary">
+            Park Servo (0°)
+          </Button>
+          <p className="text-xs text-gray-500">Turns the servo to 0°, the end of its travel towards the wall.</p>
+        </div>
 
         <div className="space-y-1">
           <div>
