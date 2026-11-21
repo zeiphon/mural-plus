@@ -130,8 +130,9 @@ public:
     int getTopDistance();
     double getPulleyDiameter();
     void setPulleyDiameter(const double diameter);
-    void leftStepper(const int dir);
-    void rightStepper(const int dir);
+    // Manual belt moves: dir -1 retracts, 1 extends, 0 stops. speed in steps/s.
+    void leftStepper(const int dir, const int speed = printSpeedSteps);
+    void rightStepper(const int dir, const int speed = printSpeedSteps);
     int extendToHome();
     void runSteppers();
     float beginLinearTravel(double x, double y, int speed);
