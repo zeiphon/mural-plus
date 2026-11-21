@@ -47,6 +47,15 @@ export const setTopDistance = (distance: number): Promise<PlusState> =>
 export const extendToHome = (): Promise<number> => request('POST', '/extendToHome')
 
 export const run = (speed: number): Promise<PlusState> => request('POST', '/run', { speed: String(speed) })
+export const pauseDrawing = (): Promise<PlusState> => request('POST', '/pauseDrawing')
+export const resumeDrawing = (): Promise<PlusState> => request('POST', '/resumeDrawing')
+export const stopDrawing = (): Promise<PlusState> => request('POST', '/stopDrawing')
+
+/** Moves back to the home position, lifting the pen first. */
+export const goHome = (): Promise<PlusState> => request('POST', '/goHome')
+
+/** Lifts the pen to its up angle (ramped). */
+export const penUp = (): Promise<string> => request('POST', '/penUp')
 
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))

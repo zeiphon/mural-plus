@@ -3,7 +3,7 @@ import { Card } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Slider } from '../../components/Slider'
 import { showAlert } from '../../components/AlertModal'
-import { getPlusState, run, errorMessage } from '../api'
+import { getPlusState, run, goHome, errorMessage } from '../api'
 import type { PlusState, SetupStep } from '../types'
 
 interface Props {
@@ -31,6 +31,14 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Prop
     }, 2000)
     return () => clearInterval(id)
   }, [busy, onStateChange])
+
+  async function handleGoHome() {
+    try {
+      onStateChange(await goHome())
+    } catch (err) {
+      await showAlert(`Couldn't return home: ${errorMessage(err)}`)
+    }
+  }
 
   async function handleStart() {
     setStarting(true)
@@ -110,7 +118,16 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Prop
       {busy && (
         <div className="flex items-center justify-center gap-3 text-sm text-gray-400">
           <div className="w-4 h-4 border-2 border-gray-700 border-t-cyan-500 rounded-full animate-spin" />
-          {state.status === 'homing' ? 'Extending to home…' : 'Moving…'}
+          {state.status === 'homing' ? 'Extending to home…' : state.status === 'starting' ? 'Starting…' : 'Moving…'}
+        </div>
+      )}
+
+      {!busy && state.ready.position && !state.position.atHome && (
+        <div className="flex items-center gap-3">
+          <p className="flex-1 text-sm text-gray-400">Mural isn't at its home position.</p>
+          <Button variant="secondary" fullWidth={false} onClick={handleGoHome}>
+            Return home
+          </Button>
         </div>
       )}
 

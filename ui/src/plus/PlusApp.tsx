@@ -4,7 +4,6 @@ import type { SvgState } from '../svgControl'
 import type { RasterImageState } from '../rasterControl'
 import type { RendererDefinition } from '../renderers/index'
 import { getRenderersByInputType } from '../renderers/index'
-import { setServo } from '../api'
 import { showAlert, showErrorAlert } from '../components/AlertModal'
 import { Card } from '../components/Card'
 import { ToolsModal } from '../components/ToolsModal'
@@ -16,7 +15,7 @@ import { RasterUploadScreen } from '../screens/RasterUploadScreen'
 import { ChooseRendererScreen } from '../screens/ChooseRendererScreen'
 import { DrawingPreviewScreen } from '../screens/DrawingPreviewScreen'
 import { UploadProgressScreen } from '../screens/UploadProgressScreen'
-import { getPlusState, setMode, reloadWhenBack, errorMessage } from './api'
+import { getPlusState, setMode, penUp, reloadWhenBack, errorMessage } from './api'
 import type { PlusState, SetupStep } from './types'
 import { Page } from './Page'
 import { OverviewScreen } from './screens/OverviewScreen'
@@ -39,11 +38,6 @@ type View =
   | 'ChooseRenderer'
   | 'DrawingPreview'
   | 'UploadProgress'
-
-// Upstream's pen-up angle (src/pen.cpp). Used to lift the pen when leaving pen
-// calibration until the plus pen (M2) takes over.
-const PEN_UP_ANGLE = 90
-const PEN_PARKED_ANGLE = 70 // where upstream's pen calibration screen starts
 
 export function PlusApp() {
   const [state, setState] = useState<PlusState | null>(null)
@@ -81,9 +75,9 @@ export function PlusApp() {
   }
 
   function handleBackToOverview() {
-    if (view === 'pen' && state) {
+    if (view === 'pen') {
       // Don't leave the pen touching the wall
-      setServo(state.pen.calibrated ? PEN_UP_ANGLE : PEN_PARKED_ANGLE).catch(() => {})
+      penUp().catch(() => {})
     }
     showOverview()
   }
@@ -180,7 +174,7 @@ export function PlusApp() {
       screen = <PenCalibrationScreen onDone={showOverview} />
       break
     case 'drawing':
-      screen = <DrawingScreen onFinished={handleDrawingFinished} />
+      screen = <DrawingScreen initialState={state} onFinished={handleDrawingFinished} />
       break
     case 'restarting':
       screen = (
