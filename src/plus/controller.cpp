@@ -12,7 +12,10 @@ namespace {
     constexpr double HOME_TOLERANCE_MM = 0.5;
     constexpr int DEFAULT_SPEED = 650;
     constexpr int MIN_SPEED = 300;
-    constexpr int MAX_SPEED = 3000;
+    // Movement sets each motor's AccelStepper max speed to this, and setSpeed()
+    // silently caps anything faster. Above it, only the faster belt would be capped,
+    // so the two belts would no longer match and moves would curve.
+    constexpr int MAX_SPEED = moveSpeedSteps;
 }
 
 Controller::Controller(Movement *movement, PlusPen *pen, PlusRunner *runner, Display *display, bool hotspotMode, const String &ipAddress) {
