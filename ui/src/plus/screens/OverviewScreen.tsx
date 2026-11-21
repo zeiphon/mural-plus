@@ -74,13 +74,6 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Prop
       enabled: true,
     },
     {
-      id: 'drawing',
-      title: 'Drawing',
-      done: state.ready.drawing,
-      detail: drawingDetail(state),
-      enabled: state.ready.distance,
-    },
-    {
       id: 'belts',
       title: 'Belts',
       done: state.ready.position,
@@ -103,6 +96,13 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Prop
       enabled: true,
       // The calibration is kept across restarts, but it no longer fits once the pen has been taken out.
       reset: state.ready.pen ? { label: 'Forget the pen calibration and lift the pen', onClick: handleResetPen } : undefined,
+    },
+    {
+      id: 'drawing',
+      title: 'Drawing',
+      done: state.ready.drawing,
+      detail: drawingDetail(state),
+      enabled: state.ready.distance,
     },
   ]
 
