@@ -5,7 +5,11 @@
 # phy_init used to overlap it, so every upload overwrote the last NVS page,
 # where settings such as the pulley diameter are kept. phy_init isn't needed:
 # the Arduino core builds its PHY init data into the app.
+#
+# v2-plus: the app partition is larger than upstream's 1200K, which upstream's
+# firmware alone already fills to 94% (plus mode carries both modes). LittleFS
+# only holds the web UI (about 425K gzipped), since drawings are on the SD card.
 nvs,      data, nvs,     0x9000,  0x5000,
 otadata,  data, ota,     0xe000,  0x2000,
-factory,  app,  factory, 0x10000, 1200K,
-spiffs,   data, spiffs,  0x13C000, 2800K,
+factory,  app,  factory, 0x10000, 2048K,
+spiffs,   data, spiffs,  0x210000, 1984K,
