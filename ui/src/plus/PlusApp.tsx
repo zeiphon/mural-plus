@@ -8,7 +8,6 @@ import { showAlert, showErrorAlert } from '../components/AlertModal'
 import { Card } from '../components/Card'
 import { ToolsModal } from '../components/ToolsModal'
 import { LoadingScreen } from '../screens/LoadingScreen'
-import { PenCalibrationScreen } from '../screens/PenCalibrationScreen'
 import { InputSelectScreen } from '../screens/InputSelectScreen'
 import { SvgUploadScreen } from '../screens/SvgUploadScreen'
 import { RasterUploadScreen } from '../screens/RasterUploadScreen'
@@ -22,6 +21,7 @@ import { OverviewScreen } from './screens/OverviewScreen'
 import { DistanceScreen } from './screens/DistanceScreen'
 import { BeltsScreen } from './screens/BeltsScreen'
 import { DrawingScreen } from './screens/DrawingScreen'
+import { PenScreen } from './screens/PenScreen'
 import { PlusSettingsModal } from './settings/PlusSettingsModal'
 
 type View =
@@ -173,7 +173,7 @@ export function PlusApp() {
       screen = <BeltsScreen state={state} onDone={showOverview} />
       break
     case 'pen':
-      screen = <PenCalibrationScreen onDone={showOverview} />
+      screen = <PenScreen state={state} onDone={showOverview} />
       break
     case 'drawing':
       screen = <DrawingScreen initialState={state} onFinished={handleDrawingFinished} />
