@@ -29,6 +29,9 @@ class PlusRunner {
     void requestPause();
     void requestResume();
     void requestStop();
+    // Steps per second for the moves that follow (the current one keeps its speed).
+    void setSpeed(int stepsPerSecond) { speed = stepsPerSecond; }
+    int getSpeed() { return speed; }
 
     bool isRunning() { return !stopped; }  // true while drawing, including paused
     const char *stateName();               // idle / drawing / pausing / paused / resuming / stopping
@@ -47,7 +50,7 @@ class PlusRunner {
 
     volatile bool stopped = true;
     File openedFile;
-    int speed = 650;
+    volatile int speed = 650;
     Task *currentTask = nullptr;
     Task *finishingSequence[2] = {nullptr, nullptr};  // lift the pen, then go home
     int sequenceIx = 0;

@@ -5,6 +5,7 @@
 #include "plus_pen.h"
 #include "plus_runner.h"
 #include "controller.h"
+#include "persist.h"
 
 namespace plus {
 
@@ -88,7 +89,8 @@ bool begin(AsyncWebServer *server, Movement *movement, Display *display, bool ho
 
     Serial.println("Mural Plus mode");
     gMovement = movement;
-    gPen = new PlusPen();
+    persist.begin();
+    gPen = new PlusPen(persist.loadPenSettings());
     gRunner = new PlusRunner(movement, gPen, display);
     gController = new Controller(movement, gPen, gRunner, display, hotspotMode, ipAddress);
 

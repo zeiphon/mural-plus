@@ -2,6 +2,7 @@
 #include <SD.h>
 #include <stdexcept>
 #include "ArduinoJson.h"
+#include "persist.h"
 
 namespace plus {
 
@@ -25,6 +26,8 @@ Controller::Controller(Movement *movement, PlusPen *pen, PlusRunner *runner, Dis
 }
 
 void Controller::registerRoutes(AsyncWebServer *server) {
+    this->server = server;
+
     // Upstream's routes (ui/src/api.ts)
     server->on("/getState", HTTP_GET, [this](AsyncWebServerRequest *r) { respondWithState(r); });
     server->on("/setTopDistance", HTTP_POST, [this](AsyncWebServerRequest *r) { setTopDistance(r); });
@@ -48,6 +51,11 @@ void Controller::registerRoutes(AsyncWebServer *server) {
     server->on("/pauseDrawing", HTTP_POST, [this](AsyncWebServerRequest *r) { pauseDrawing(r); });
     server->on("/resumeDrawing", HTTP_POST, [this](AsyncWebServerRequest *r) { resumeDrawing(r); });
     server->on("/stopDrawing", HTTP_POST, [this](AsyncWebServerRequest *r) { stopDrawing(r); });
+    server->on("/setDrawingSpeed", HTTP_POST, [this](AsyncWebServerRequest *r) { setDrawingSpeed(r); });
+    server->on("/adjustPen", HTTP_POST, [this](AsyncWebServerRequest *r) { adjustPen(r); });
+    server->on("/penSettings", HTTP_POST, [this](AsyncWebServerRequest *r) { setPenSettings(r); });
+    server->on("/penDown", HTTP_POST, [this](AsyncWebServerRequest *r) { penDown(r); });
+    server->on("/settings", HTTP_POST, [this](AsyncWebServerRequest *r) { setSettings(r); });
 }
 
 void Controller::loop() {
@@ -85,6 +93,11 @@ void Controller::loop() {
             try {
                 runner->start(speed);
                 Serial.printf("Drawing started at speed %d\n", speed);
+                if (runner->isRunning() && !persist.getWebWhileDrawing()) {
+                    Serial.println("Stopping the web server while drawing (Settings)");
+                    server->end();
+                    serverStopped = true;
+                }
             } catch (const std::exception &e) {
                 snprintf(startError, sizeof(startError), "%s", e.what());
                 Serial.printf("Failed to start drawing: %s\n", e.what());
@@ -99,9 +112,20 @@ void Controller::loop() {
             // The kinematics rejected a move, so the coordinates may not match the belts.
             positionKnown = false;
         }
+        if (serverStopped) {
+            server->begin();
+            serverStopped = false;
+            Serial.println("Web server started again");
+        }
         showHomeScreen();
     }
     wasDrawing = drawing;
+
+    if (!drawing) {
+        // Pen adjustments are saved straight away when idle, and at the end of a
+        // drawing otherwise: flash writes stall the stepping loop.
+        pen->saveAdjustments();
+    }
 }
 
 const char *Controller::statusName() {
@@ -210,6 +234,7 @@ void Controller::respondWithState(AsyncWebServerRequest *request) {
     run["distanceDone"] = runner->getDistanceSoFar();
     run["totalDistance"] = runner->getTotalDistance();
     run["elapsedMs"] = runner->getElapsedMs();
+    run["speed"] = pendingStartSpeed > 0 ? (int)pendingStartSpeed : runner->getSpeed();
     run["lastOutcome"] = runner->lastOutcomeName();
     run["error"] = runner->getLastError();          // why the last drawing failed
     run["startError"] = (const char *)startError;   // why the last start failed
@@ -222,10 +247,19 @@ void Controller::respondWithState(AsyncWebServerRequest *request) {
     const PenSettings &ps = pen->getSettings();
     JsonObject &penJson = root.createNestedObject("pen");
     penJson["calibrated"] = penReady;
-    penJson["down"] = ps.downAngle;
-    penJson["up"] = ps.upAngle;
+    penJson["down"] = pen->getDownAngle();
+    penJson["up"] = pen->getUpAngle();
+    penJson["downBaseline"] = pen->getDownBaseline();
+    penJson["upBaseline"] = pen->getUpBaseline();
+    penJson["min"] = ps.minAngle;
+    penJson["max"] = ps.maxAngle;
+    penJson["speed"] = ps.speedDegPerSec;
+    penJson["releaseWhenUp"] = ps.releaseWhenUp;
     penJson["isDown"] = pen->isDown();
     penJson["moving"] = pen->isMoving();
+
+    JsonObject &settingsJson = root.createNestedObject("settings");
+    settingsJson["webWhileDrawing"] = persist.getWebWhileDrawing();
 
     JsonObject &file = root.createNestedObject("drawingFile");
     file["exists"] = (bool)drawingFileExists;
@@ -559,6 +593,85 @@ void Controller::stopDrawing(AsyncWebServerRequest *request) {
     }
     Serial.println("Stop requested");
     runner->requestStop();
+    respondWithState(request);
+}
+
+// Params: speed = steps per second for the rest of the drawing (not saved).
+void Controller::setDrawingSpeed(AsyncWebServerRequest *request) {
+    if (!runner->isRunning()) {
+        request->send(400, "text/plain", "Not drawing");
+        return;
+    }
+    int speed = constrain(request->arg("speed").toInt(), MIN_SPEED, MAX_SPEED);
+    runner->setSpeed(speed);
+    Serial.printf("Drawing speed set to %d\n", speed);
+    respondWithState(request);
+}
+
+// Params: which = up|down, steps = degrees (positive = firmer for down, further
+// from the wall for up). Works while drawing; saved when the drawing ends.
+void Controller::adjustPen(AsyncWebServerRequest *request) {
+    String which = request->arg("which");
+    int steps = request->arg("steps").toInt();
+    if ((which != "up" && which != "down") || steps == 0 || steps < -10 || steps > 10) {
+        request->send(400, "text/plain", "which must be up or down, steps between -10 and 10");
+        return;
+    }
+    bool down = which == "down";
+    if (down && !pen->isCalibrated()) {
+        request->send(400, "text/plain", "Calibrate the pen first");
+        return;
+    }
+    int before = down ? pen->getDownAngle() : pen->getUpAngle();
+    int after = pen->adjust(down ? PlusPen::Which::Down : PlusPen::Which::Up, steps);
+    if (after == before) {
+        request->send(409, "text/plain", "That angle is already at its limit");
+        return;
+    }
+    respondWithState(request);
+}
+
+// Params (all optional): up, down, min, max, speed, releaseWhenUp=0|1
+void Controller::setPenSettings(AsyncWebServerRequest *request) {
+    if (rejectIfDrawing(request)) return;
+    PenSettings s = pen->getSettings();
+    s.upAngle = pen->getUpAngle();
+    s.downAngle = pen->getDownAngle();
+    if (request->hasArg("up")) s.upAngle = request->arg("up").toInt();
+    if (request->hasArg("down")) s.downAngle = request->arg("down").toInt();
+    if (request->hasArg("min")) s.minAngle = request->arg("min").toInt();
+    if (request->hasArg("max")) s.maxAngle = request->arg("max").toInt();
+    if (request->hasArg("speed")) s.speedDegPerSec = request->arg("speed").toInt();
+    if (request->hasArg("releaseWhenUp")) {
+        String v = request->arg("releaseWhenUp");
+        s.releaseWhenUp = v == "1" || v == "true";
+    }
+    if (s.downAngle >= 0 && s.downAngle == s.upAngle) {
+        request->send(400, "text/plain", "The up and down angles can't be the same");
+        return;
+    }
+    pen->applySettings(s);
+    respondWithState(request);
+}
+
+void Controller::penDown(AsyncWebServerRequest *request) {
+    if (rejectIfDrawing(request)) return;
+    if (!pen->isCalibrated()) {
+        request->send(400, "text/plain", "Calibrate the pen first");
+        return;
+    }
+    pen->down();
+    request->send(200, "text/plain", "OK");
+}
+
+// Params: webWhileDrawing=0|1
+void Controller::setSettings(AsyncWebServerRequest *request) {
+    if (rejectIfDrawing(request)) return;
+    if (request->hasArg("webWhileDrawing")) {
+        String v = request->arg("webWhileDrawing");
+        persist.setWebWhileDrawing(v == "1" || v == "true");
+        Serial.printf("Web UI while drawing %s\n", persist.getWebWhileDrawing() ? "on" : "off");
+    }
     respondWithState(request);
 }
 

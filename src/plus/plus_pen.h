@@ -1,32 +1,35 @@
 #ifndef PlusPen_h
 #define PlusPen_h
 #include <ESP32Servo.h>
+#include <atomic>
 
 namespace plus {
 
 constexpr int SERVO_PIN = 21; // same as upstream's Pen
 
-// Pen/servo settings. Angles are raw servo degrees; lower = towards the wall.
-// The defaults reproduce upstream: up at 90°, ramped at 90°/s.
+// Pen/servo settings. Angles are raw servo degrees; on v2, lower = towards the
+// wall. The defaults reproduce upstream: up at 90°, ramped at 90°/s.
 struct PenSettings {
     int upAngle = 90;
     int downAngle = -1;         // -1 = not calibrated
     int minAngle = 0;           // soft limits: nothing commands the servo outside these
     int maxAngle = 180;
     int speedDegPerSec = 90;
+    bool releaseWhenUp = false; // stop sending pulses once the pen is up (the servo goes limp)
 };
 
 // Non-blocking, ramped servo control, ported from v1.1-plus. Call update()
 // from loop(). Every move is ramped at speedDegPerSec and clamped to the soft
-// limits. moveTo/up/down may be called from the web server task.
+// limits. moveTo/up/down/adjust may be called from the web server task.
 //
 // A hobby servo gives no feedback: everything here is what was *commanded*,
 // not where the horn physically is.
 class PlusPen {
     public:
     enum class Position { Unknown, Up, Down, Other };
+    enum class Which { Up, Down };
 
-    PlusPen();
+    explicit PlusPen(const PenSettings &settings);
     void update();
 
     void moveTo(int angle);     // ramped, clamped; the pen is then neither up nor down
@@ -38,8 +41,25 @@ class PlusPen {
     bool isDown() { return position == Position::Down; }  // down or on its way down
     bool isCalibrated() { return settings.downAngle >= 0; }
 
-    // Pen calibration: the angle at which the pen touches the wall.
+    // Nudges the up or down angle by `steps` degrees, at any time, including while
+    // drawing. Positive = firmer for the down angle, further from the wall for the
+    // up angle. If the pen is in that position it moves straight away, otherwise
+    // the angle is used next time. The angles stay within the soft limits and never
+    // meet. Returns the new angle (unchanged if it's at a limit; -1 for the down
+    // angle when not calibrated).
+    int adjust(Which which, int steps);
+    int getUpAngle();           // including a not-yet-applied adjustment
+    int getDownAngle();
+    // The angles before the adjustments made since the last save, or -1 if none.
+    int getUpBaseline() { return upBaseline; }
+    int getDownBaseline() { return downBaseline; }
+    // Saves adjustments made since the last save. Main loop only, never while drawing.
+    void saveAdjustments();
+
+    // Pen calibration: the angle at which the pen touches the wall. Saves.
     void setDownAngle(int angle);
+    // Replaces all settings (clamped), and saves. Not while drawing.
+    void applySettings(const PenSettings &newSettings);
     const PenSettings &getSettings() { return settings; }
     int getTargetAngle() { return targetAngle; }
 
@@ -51,6 +71,12 @@ class PlusPen {
     volatile bool pendingMove = false;  // a new target was requested
     volatile bool busy = false;         // move requested, ramping or settling
     volatile Position position = Position::Unknown;
+
+    // Adjustments requested from the web task, applied in update() (-1 = none)
+    std::atomic<int> requestedUp{-1};
+    std::atomic<int> requestedDown{-1};
+    int upBaseline = -1;
+    int downBaseline = -1;
 
     double currentAngle;                // last commanded angle (ramped)
     bool positionKnown = false;         // false until the first pulse after boot
@@ -66,8 +92,11 @@ class PlusPen {
     unsigned long holdOffUntilMs = 0;
 
     int clamp(int angle);
+    int towardsWall();                  // -1 if lower angles are towards the wall
     void setTarget(int angle, Position newPosition);
     void writeAngle(int angle);
+    void applyRequestedAngles();
+    void save();
 };
 
 }

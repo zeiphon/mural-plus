@@ -31,8 +31,10 @@ class Controller {
     PlusPen *pen;
     PlusRunner *runner;
     Display *display;
+    AsyncWebServer *server = nullptr;
     bool hotspotMode;
     String ipAddress;
+    bool serverStopped = false;            // stopped for a drawing (webWhileDrawing off)
 
     volatile int pendingStartSpeed = 0;    // > 0: loop() lifts the pen, then starts the drawing
     volatile bool goHomePending = false;   // loop() lifts the pen, then moves home
@@ -76,6 +78,11 @@ class Controller {
     void pauseDrawing(AsyncWebServerRequest *request);
     void resumeDrawing(AsyncWebServerRequest *request);
     void stopDrawing(AsyncWebServerRequest *request);
+    void setDrawingSpeed(AsyncWebServerRequest *request);
+    void adjustPen(AsyncWebServerRequest *request);
+    void setPenSettings(AsyncWebServerRequest *request);
+    void penDown(AsyncWebServerRequest *request);
+    void setSettings(AsyncWebServerRequest *request);
 };
 
 }
