@@ -29,6 +29,7 @@ Each fix is its own branch from `upstream/main` and is merged (not cherry-picked
 
 | Branch | Change | Status |
 |---|---|---|
-| `fix/windows-build` | `build.py` works on Windows (cmd.exe has no `rm`/`cp`) | In progress (`UPSTREAM_PR_PLAN.md`) |
-| `fix/serial-115200` | Serial and monitor at 115200 baud | Ready, not submitted |
-| `fix/partition-table` | NVS no longer overlaps `boot_app0.bin` at 0xe000 | Ready, not submitted. Raise with the maintainer first: boards lose saved settings once |
+| `fix/windows-build` | `build.py` works on Windows (cmd.exe has no `rm`/`cp`) | PR submitted 2026-11-21. Merged into `v2-plus` |
+| `fix/serial-115200` | Serial and monitor at 115200 baud | Ready, not submitted. Merged into `v2-plus` |
+| `fix/partition-table` | NVS no longer overlaps `boot_app0.bin` at 0xe000 | Ready, not submitted. Merged into `v2-plus`. Raise with the maintainer first: boards lose saved settings once |
+| — | Stop tracking `ui/tsconfig.tsbuildinfo` (rewritten by every UI build) | Idea only |
