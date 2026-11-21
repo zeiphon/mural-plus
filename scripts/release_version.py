@@ -9,15 +9,27 @@ import subprocess
 
 TAG_PATTERN = "v2-plus*"
 
+# Tracked files that get rewritten by the build or the IDE rather than edited,
+# so changes to them don't make a build "dirty": the UI build (tsc -b) rewrites
+# the tsbuildinfo, and the PlatformIO IDE rewrites launch.json with local paths.
+GENERATED_FILES = ["ui/tsconfig.tsbuildinfo", ".vscode/launch.json"]
+
+
+def _git(project_dir, *args):
+    return subprocess.run(["git", *args], cwd=project_dir, capture_output=True,
+                          text=True, check=True).stdout.strip()
+
 
 def get_version(project_dir):
     try:
-        out = subprocess.run(
-            ["git", "describe", "--tags", "--match", TAG_PATTERN, "--always", "--dirty"],
-            cwd=project_dir, capture_output=True, text=True, check=True,
-        ).stdout.strip()
+        out = _git(project_dir, "describe", "--tags", "--match", TAG_PATTERN, "--always")
+        # Like describe --dirty: changes to tracked files only, minus generated ones.
+        changes = _git(project_dir, "status", "--porcelain", "--untracked-files=no", "--", ".",
+                       *[":(exclude)" + path for path in GENERATED_FILES])
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
+    if changes:
+        out += "-dirty"
     if out.startswith("v"):
         return out[1:]
     return "dev-" + out   # no release tag reachable: just the commit hash
