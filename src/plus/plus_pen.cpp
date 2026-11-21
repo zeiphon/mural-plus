@@ -153,6 +153,14 @@ void PlusPen::setDownAngle(int angle) {
     Serial.printf("Pen: down angle calibrated to %d deg\n", settings.downAngle);
 }
 
+void PlusPen::clearCalibration() {
+    requestedDown.store(-1);
+    settings.downAngle = -1;
+    save();
+    up();
+    Serial.println("Pen: calibration reset");
+}
+
 void PlusPen::applySettings(const PenSettings &newSettings) {
     PenSettings s = newSettings;
     s.minAngle = constrain(s.minAngle, 0, 180);

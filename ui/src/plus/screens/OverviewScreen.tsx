@@ -3,7 +3,7 @@ import { Card } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Slider } from '../../components/Slider'
 import { showAlert } from '../../components/AlertModal'
-import { getPlusState, run, goHome, errorMessage } from '../api'
+import { getPlusState, run, goHome, resetPen, errorMessage } from '../api'
 import type { PlusState, SetupStep } from '../types'
 
 interface Props {
@@ -40,6 +40,14 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Prop
     }
   }
 
+  async function handleResetPen() {
+    try {
+      onStateChange(await resetPen())
+    } catch (err) {
+      await showAlert(`Couldn't reset the pen: ${errorMessage(err)}`)
+    }
+  }
+
   async function handleStart() {
     setStarting(true)
     try {
@@ -50,7 +58,14 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Prop
     }
   }
 
-  const steps: { id: SetupStep; title: string; done: boolean; detail: string; enabled: boolean }[] = [
+  const steps: {
+    id: SetupStep
+    title: string
+    done: boolean
+    detail: string
+    enabled: boolean
+    reset?: { label: string; onClick: () => void }
+  }[] = [
     {
       id: 'distance',
       title: 'Hanger distance',
@@ -86,6 +101,8 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Prop
         ? `Calibrated: down ${state.pen.down}°, up ${state.pen.up}°`
         : 'Calibrate with Mural hanging at home',
       enabled: true,
+      // The calibration is kept across restarts, but it no longer fits once the pen has been taken out.
+      reset: state.ready.pen ? { label: 'Forget the pen calibration and lift the pen', onClick: handleResetPen } : undefined,
     },
   ]
 
@@ -93,27 +110,39 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Prop
     <Card title="Mural" subtitle="Do these steps in any order, and redo any of them at any time.">
       <div className="space-y-3">
         {steps.map((step, i) => (
-          <button
-            key={step.id}
-            onClick={() => onOpen(step.id)}
-            disabled={!step.enabled || busy}
-            className="w-full flex items-center gap-4 rounded-xl px-4 py-4 bg-gray-800 border border-gray-700 text-left transition-all enabled:hover:bg-gray-700 enabled:hover:border-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <span
-              className={`flex-none w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-                step.done ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300'
-              }`}
+          <div key={step.id} className="flex gap-2">
+            <button
+              onClick={() => onOpen(step.id)}
+              disabled={!step.enabled || busy}
+              className="flex-1 min-w-0 flex items-center gap-4 rounded-xl px-4 py-4 bg-gray-800 border border-gray-700 text-left transition-all enabled:hover:bg-gray-700 enabled:hover:border-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {step.done ? '✓' : i + 1}
-            </span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-base font-semibold text-white">{step.title}</span>
-              <span className="block text-sm text-gray-400">{step.detail}</span>
-            </span>
-            <span className="flex-none text-xl text-gray-500" aria-hidden>
-              ›
-            </span>
-          </button>
+              <span
+                className={`flex-none w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
+                  step.done ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300'
+                }`}
+              >
+                {step.done ? '✓' : i + 1}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-base font-semibold text-white">{step.title}</span>
+                <span className="block text-sm text-gray-400">{step.detail}</span>
+              </span>
+              <span className="flex-none text-xl text-gray-500" aria-hidden>
+                ›
+              </span>
+            </button>
+            {step.reset && (
+              <button
+                onClick={step.reset.onClick}
+                disabled={busy || starting}
+                title={step.reset.label}
+                aria-label={step.reset.label}
+                className="flex-none rounded-xl px-3 bg-gray-800 border border-gray-700 text-sm text-gray-300 transition-all enabled:hover:bg-gray-700 enabled:hover:border-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         ))}
       </div>
 

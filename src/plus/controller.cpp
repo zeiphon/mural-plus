@@ -55,6 +55,7 @@ void Controller::registerRoutes(AsyncWebServer *server) {
     server->on("/adjustPen", HTTP_POST, [this](AsyncWebServerRequest *r) { adjustPen(r); });
     server->on("/penSettings", HTTP_POST, [this](AsyncWebServerRequest *r) { setPenSettings(r); });
     server->on("/penDown", HTTP_POST, [this](AsyncWebServerRequest *r) { penDown(r); });
+    server->on("/resetPen", HTTP_POST, [this](AsyncWebServerRequest *r) { resetPen(r); });
     server->on("/settings", HTTP_POST, [this](AsyncWebServerRequest *r) { setSettings(r); });
 }
 
@@ -436,6 +437,14 @@ void Controller::setPenDistance(AsyncWebServerRequest *request) {
     }
     pen->setDownAngle(request->arg("angle").toInt());
     pen->up();
+    respondWithState(request);
+}
+
+// Forgets the pen-down angle, for when the pen has been taken out and put back,
+// and lifts the pen. Drawing then waits for a new calibration.
+void Controller::resetPen(AsyncWebServerRequest *request) {
+    if (rejectIfDrawing(request)) return;
+    pen->clearCalibration();
     respondWithState(request);
 }
 

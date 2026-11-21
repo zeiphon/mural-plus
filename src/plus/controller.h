@@ -70,6 +70,7 @@ class Controller {
     void setServo(AsyncWebServerRequest *request);
     void penUp(AsyncWebServerRequest *request);
     void setPenDistance(AsyncWebServerRequest *request);
+    void resetPen(AsyncWebServerRequest *request);
     void estepsCalibration(AsyncWebServerRequest *request);
     void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
     void uploadComplete(AsyncWebServerRequest *request);

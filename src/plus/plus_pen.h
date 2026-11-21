@@ -58,6 +58,8 @@ class PlusPen {
 
     // Pen calibration: the angle at which the pen touches the wall. Saves.
     void setDownAngle(int angle);
+    // Forgets the down angle (for when the pen has been taken out), saves, and lifts the pen.
+    void clearCalibration();
     // Replaces all settings (clamped), and saves. Not while drawing.
     void applySettings(const PenSettings &newSettings);
     const PenSettings &getSettings() { return settings; }

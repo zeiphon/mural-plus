@@ -57,6 +57,8 @@ export const goHome = (): Promise<PlusState> => request('POST', '/goHome')
 /** Lifts the pen to its up angle (ramped). */
 export const penUp = (): Promise<string> => request('POST', '/penUp')
 export const penDown = (): Promise<string> => request('POST', '/penDown')
+/** Forgets the pen calibration (for when the pen has been taken out) and lifts the pen. */
+export const resetPen = (): Promise<PlusState> => request('POST', '/resetPen')
 
 /** Steps per second for the rest of the drawing. */
 export const setDrawingSpeed = (speed: number): Promise<PlusState> =>
