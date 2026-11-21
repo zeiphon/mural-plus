@@ -88,17 +88,17 @@ void Movement::setOrigin()
     homed = true;
 };
 
-void Movement::leftStepper(const int dir)
+void Movement::leftStepper(const int dir, const int speed)
 {
     if (dir > 0)
     {
         leftMotor->move(INFINITE_STEPS);
-        leftMotor->setSpeed(printSpeedSteps);
+        leftMotor->setSpeed(speed);
     }
     else if (dir < 0)
     {
         leftMotor->move(-INFINITE_STEPS);
-        leftMotor->setSpeed(printSpeedSteps);
+        leftMotor->setSpeed(speed);
     }
     else
     {
@@ -109,17 +109,17 @@ void Movement::leftStepper(const int dir)
     moving = true;
 };
 
-void Movement::rightStepper(const int dir)
+void Movement::rightStepper(const int dir, const int speed)
 {
     if (dir > 0)
     {
         rightMotor->move(INFINITE_STEPS);
-        rightMotor->setSpeed(printSpeedSteps);
+        rightMotor->setSpeed(speed);
     }
     else if (dir < 0)
     {
         rightMotor->move(-INFINITE_STEPS);
-        rightMotor->setSpeed(printSpeedSteps);
+        rightMotor->setSpeed(speed);
     }
     else
     {
