@@ -8,9 +8,10 @@ namespace plus {
 constexpr int SERVO_PIN = 21; // same as upstream's Pen
 
 // Pen/servo settings. Angles are raw servo degrees; on v2, lower = towards the
-// wall. The defaults reproduce upstream: up at 90°, ramped at 90°/s.
+// wall. Up is 80°, lower than upstream's 90°, where the rack-and-pinion pen
+// holder can bind. Ramped at 90°/s like upstream.
 struct PenSettings {
-    int upAngle = 90;
+    int upAngle = 80;
     int downAngle = -1;         // -1 = not calibrated
     int minAngle = 0;           // soft limits: nothing commands the servo outside these
     int maxAngle = 180;
