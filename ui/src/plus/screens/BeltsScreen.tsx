@@ -4,7 +4,7 @@ import { Button } from '../../components/Button'
 import { Toggle } from '../../components/Toggle'
 import { showAlert } from '../../components/AlertModal'
 import { leftRetractDown, leftStop, rightRetractDown, rightStop } from '../../api'
-import { extendToHome, getPlusState, delay, errorMessage } from '../api'
+import { extendToHome, getPlusState, retractBoost, delay, errorMessage } from '../api'
 import type { PlusState } from '../types'
 
 interface Props {
@@ -12,12 +12,19 @@ interface Props {
   onDone: (state: PlusState) => void
 }
 
+// Mural keeps the boost on for 600 ms after each request, so a lost release
+// (phone locked, WiFi dropped) can't leave the belts retracting fast.
+const BOOST_REPEAT_MS = 200
+
 /** Upstream's Retract Belts and Extend Belts steps on one screen. */
 export function BeltsScreen({ state, onDone }: Props) {
   const [leftOn, setLeftOn] = useState(false)
   const [rightOn, setRightOn] = useState(false)
   const [extending, setExtending] = useState(state.position.homing)
+  const [boosting, setBoosting] = useState(false)
   const mounted = useRef(true)
+  const boostTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const boostInFlight = useRef<Promise<unknown> | null>(null)
 
   // Stop the motors if the screen is left while they run. Mural ignores this
   // while extending to home.
@@ -25,6 +32,7 @@ export function BeltsScreen({ state, onDone }: Props) {
     mounted.current = true
     return () => {
       mounted.current = false
+      stopBoost()
       leftStop().catch(() => {})
       rightStop().catch(() => {})
     }
@@ -35,6 +43,52 @@ export function BeltsScreen({ state, onDone }: Props) {
     if (state.position.homing) waitForHome()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The release may never arrive if the page loses focus or is hidden, so end the boost then too.
+  useEffect(() => {
+    if (!boosting) return
+    const onVisibility = () => {
+      if (document.hidden) stopBoost()
+    }
+    window.addEventListener('blur', stopBoost)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('blur', stopBoost)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boosting])
+
+  // Nothing left to speed up
+  useEffect(() => {
+    if (!leftOn && !rightOn) stopBoost()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leftOn, rightOn])
+
+  function sendBoost() {
+    if (boostInFlight.current) return
+    boostInFlight.current = retractBoost(true)
+      .catch(() => {})
+      .finally(() => {
+        boostInFlight.current = null
+      })
+  }
+
+  function startBoost() {
+    if (boostTimer.current || !(leftOn || rightOn)) return
+    setBoosting(true)
+    sendBoost()
+    boostTimer.current = setInterval(sendBoost, BOOST_REPEAT_MS)
+  }
+
+  function stopBoost() {
+    if (!boostTimer.current) return
+    clearInterval(boostTimer.current)
+    boostTimer.current = null
+    setBoosting(false)
+    // After any request still on its way, so that one can't renew the boost
+    ;(boostInFlight.current ?? Promise.resolve()).then(() => retractBoost(false)).catch(() => {})
+  }
 
   function handleLeft(on: boolean) {
     setLeftOn(on)
@@ -47,6 +101,7 @@ export function BeltsScreen({ state, onDone }: Props) {
   }
 
   async function handleExtend() {
+    stopBoost()
     setLeftOn(false)
     setRightOn(false)
     setExtending(true)
@@ -97,6 +152,40 @@ export function BeltsScreen({ state, onDone }: Props) {
           <div className="space-y-4">
             <Toggle label="Retract left belt" checked={leftOn} onChange={handleLeft} />
             <Toggle label="Retract right belt" checked={rightOn} onChange={handleRight} />
+          </div>
+          <div className="space-y-1">
+            <button
+              type="button"
+              disabled={!leftOn && !rightOn}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                e.currentTarget.setPointerCapture(e.pointerId)
+                startBoost()
+              }}
+              onPointerUp={stopBoost}
+              onPointerCancel={stopBoost}
+              onLostPointerCapture={stopBoost}
+              onKeyDown={(e) => {
+                if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
+                  e.preventDefault()
+                  startBoost()
+                }
+              }}
+              onKeyUp={(e) => {
+                if (e.key === ' ' || e.key === 'Enter') stopBoost()
+              }}
+              onBlur={stopBoost}
+              onContextMenu={(e) => e.preventDefault()}
+              style={{ WebkitTouchCallout: 'none' }}
+              className={`w-full rounded-xl px-5 py-3 sm:py-4 font-medium text-sm sm:text-base select-none touch-none transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed ${
+                boosting ? 'bg-cyan-600 text-white' : 'bg-gray-700 enabled:hover:bg-gray-600 text-gray-200'
+              }`}
+            >
+              {boosting ? 'Retracting faster…' : 'Hold to retract faster'}
+            </button>
+            <p className="text-xs text-gray-500">
+              For long retractions. Let go before the loops reach the screws, so the motors stall at the normal speed.
+            </p>
           </div>
           <p className="text-xs text-gray-500">
             Make sure the belts are unobstructed and the motors don't skip while extending, or the drawing accuracy may

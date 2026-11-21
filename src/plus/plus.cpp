@@ -69,8 +69,10 @@ namespace {
                 request->send(409, "text/plain", "Not available while drawing");
                 return;
             }
-            // TODO(M4): switching to classic must invalidate plus's saved position,
-            // since classic moves the bot without plus knowing.
+            if (plusActive && mode == "classic") {
+                // Classic mode can replace the drawing on the SD card without plus knowing.
+                persist.clearDrawing();
+            }
             saveClassicMode(mode == "classic");
             Serial.printf("Switching to %s mode, restarting\n", mode.c_str());
             request->send(200, "text/plain", "Restarting");

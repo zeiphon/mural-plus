@@ -16,6 +16,10 @@ namespace {
     // silently caps anything faster. Above it, only the faster belt would be capped,
     // so the two belts would no longer match and moves would curve.
     constexpr int MAX_SPEED = moveSpeedSteps;
+    // Retract boost: the speed extend to home already uses (also each motor's max),
+    // and how long each /retractBoost request keeps it on.
+    constexpr int BOOST_SPEED = moveSpeedSteps;
+    constexpr unsigned long BOOST_LEASE_MS = 600;
 }
 
 Controller::Controller(Movement *movement, PlusPen *pen, PlusRunner *runner, Display *display, bool hotspotMode, const String &ipAddress) {
@@ -26,6 +30,19 @@ Controller::Controller(Movement *movement, PlusPen *pen, PlusRunner *runner, Dis
     this->hotspotMode = hotspotMode;
     this->ipAddress = ipAddress;
     updateStorageInfo();
+
+    // The hanger distance and the drawing survive a restart; the belt position doesn't.
+    int topDistance = persist.getTopDistance();
+    if (topDistance > 0) {
+        movement->setTopDistance(topDistance);
+    }
+    if (drawingFileExists && persist.getDrawingTopDistance() > 0 && persist.getDrawingSize() == drawingFileSize) {
+        drawingTopDistance = persist.getDrawingTopDistance();
+        Serial.printf("Drawing on the SD card is for a %d mm hanger distance\n", (int)drawingTopDistance);
+    } else if (persist.getDrawingTopDistance() > 0) {
+        Serial.println("Drawing on the SD card has changed or gone, choose it again");
+        persist.clearDrawing();
+    }
 }
 
 void Controller::registerRoutes(AsyncWebServer *server) {
@@ -59,10 +76,13 @@ void Controller::registerRoutes(AsyncWebServer *server) {
     server->on("/penSettings", HTTP_POST, [this](AsyncWebServerRequest *r) { setPenSettings(r); });
     server->on("/penDown", HTTP_POST, [this](AsyncWebServerRequest *r) { penDown(r); });
     server->on("/resetPen", HTTP_POST, [this](AsyncWebServerRequest *r) { resetPen(r); });
+    server->on("/retractBoost", HTTP_POST, [this](AsyncWebServerRequest *r) { retractBoost(r); });
     server->on("/settings", HTTP_POST, [this](AsyncWebServerRequest *r) { setSettings(r); });
 }
 
 void Controller::loop() {
+    updateManualBelts();
+
     if (positionedMove && !movement->isMoving()) {
         positionedMove = false;
         if (homing) {
@@ -140,10 +160,9 @@ const char *Controller::statusName() {
     return "idle";
 }
 
-// A drawing is usable if it was uploaded this session for the current hanger
-// distance (drawings are scaled to the drawable width, which depends on it).
-// Until plus saves its settings (M4), a drawing left on the SD card from before
-// a restart has to be uploaded again.
+// A drawing is usable if it was made for the current hanger distance (drawings
+// are scaled to the drawable width, which depends on it). Plus records that
+// distance with the file's size, so a drawing survives a restart.
 bool Controller::drawingReady() {
     return drawingFileExists && drawingTopDistance > 0 && drawingTopDistance == movement->getTopDistance();
 }
@@ -174,10 +193,12 @@ void Controller::showHomeScreen() {
 void Controller::updateStorageInfo() {
     size_t free = SD.totalBytes() - SD.usedBytes();
     drawingFileExists = SD.exists(COMMANDS_PATH);
+    drawingFileSize = 0;
     if (drawingFileExists) {
         File f = SD.open(COMMANDS_PATH);
         if (f) {
-            free += f.size();
+            drawingFileSize = f.size();
+            free += drawingFileSize;
             f.close();
         }
     }
@@ -295,6 +316,7 @@ void Controller::setTopDistance(AsyncWebServerRequest *request) {
         Serial.println("Hanger distance changed, belt position no longer known");
     }
     movement->setTopDistance(distance);
+    persist.setTopDistance(distance);
     respondWithState(request);
 }
 
@@ -336,18 +358,19 @@ void Controller::command(AsyncWebServerRequest *request) {
             Serial.println("Belts moved by hand, belt position no longer known");
         }
     }
+    // Applied by loop() (updateManualBelts)
     if (command == "l-ret") {
-        movement->leftStepper(-1);
+        leftBelt.requested.store(-1);
     } else if (command == "l-ext") {
-        movement->leftStepper(1);
+        leftBelt.requested.store(1);
     } else if (command == "l-0") {
-        movement->leftStepper(0);
+        leftBelt.requested.store(0);
     } else if (command == "r-ret") {
-        movement->rightStepper(-1);
+        rightBelt.requested.store(-1);
     } else if (command == "r-ext") {
-        movement->rightStepper(1);
+        rightBelt.requested.store(1);
     } else if (command == "r-0") {
-        movement->rightStepper(0);
+        rightBelt.requested.store(0);
     } else {
         request->send(400, "text/plain", "Unsupported command");
         return;
@@ -451,6 +474,53 @@ void Controller::resetPen(AsyncWebServerRequest *request) {
     respondWithState(request);
 }
 
+// Params: on=1 (default) or 0. The Belts screen's hold-to-boost button sends
+// on=1 repeatedly while held, and each request keeps retracting belts at the
+// boost speed for BOOST_LEASE_MS. If the requests stop (button released, phone
+// locked, connection lost), the belts drop back to the normal speed.
+void Controller::retractBoost(AsyncWebServerRequest *request) {
+    if (rejectIfDrawing(request)) return;
+    boostUntilMs = millis() + (request->arg("on") == "0" ? 0 : BOOST_LEASE_MS);
+    request->send(200, "text/plain", "OK");
+}
+
+// Main loop only. Applies manual belt requests and the retract boost.
+void Controller::updateManualBelts() {
+    if (isDrawing() || positionedMove || goHomePending) {
+        // command() rejects manual moves during these; drop anything stale.
+        for (ManualBelt *belt : {&leftBelt, &rightBelt}) {
+            belt->requested.store(NO_REQUEST);
+            belt->dir = 0;
+            belt->boosted = false;
+        }
+        return;
+    }
+    bool boost = (long)(boostUntilMs - millis()) > 0;
+    updateManualBelt(leftBelt, true, boost);
+    updateManualBelt(rightBelt, false, boost);
+}
+
+void Controller::updateManualBelt(ManualBelt &belt, bool left, bool boost) {
+    int requested = belt.requested.exchange(NO_REQUEST);
+    if (requested != NO_REQUEST) {
+        belt.dir = requested;
+    }
+    bool boosted = boost && belt.dir < 0; // only ever retracting
+    if (requested == NO_REQUEST && boosted == belt.boosted) {
+        return;
+    }
+    if (boosted != belt.boosted) {
+        Serial.printf("%s belt: retracting %s\n", left ? "Left" : "Right", boosted ? "faster" : "at normal speed");
+    }
+    belt.boosted = boosted;
+    int speed = boosted ? BOOST_SPEED : printSpeedSteps;
+    if (left) {
+        movement->leftStepper(belt.dir, speed);
+    } else {
+        movement->rightStepper(belt.dir, speed);
+    }
+}
+
 void Controller::estepsCalibration(AsyncWebServerRequest *request) {
     if (rejectIfBusy(request)) return;
     int distanceMm = request->arg("distance").toInt();
@@ -493,6 +563,7 @@ void Controller::handleUpload(AsyncWebServerRequest *request, String filename, s
             // The old drawing is about to be overwritten, so stop offering it.
             drawingFileExists = false;
             drawingTopDistance = -1;
+            persist.clearDrawing();
             if (SD.exists(COMMANDS_PATH)) {
                 SD.remove(COMMANDS_PATH);
             }
@@ -533,6 +604,7 @@ void Controller::handleUpload(AsyncWebServerRequest *request, String filename, s
         if (uploadIsLastChunk && uploadErrorCode == 0) {
             drawingTopDistance = movement->getTopDistance();
             updateStorageInfo();
+            persist.setDrawing(drawingTopDistance, drawingFileSize);
             Serial.println("Upload finished");
         }
     }

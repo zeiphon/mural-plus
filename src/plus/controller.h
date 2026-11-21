@@ -1,6 +1,7 @@
 #ifndef PlusController_h
 #define PlusController_h
 #include <ESPAsyncWebServer.h>
+#include <atomic>
 #include "movement.h"
 #include "display.h"
 #include "plus_pen.h"
@@ -43,9 +44,22 @@ class Controller {
     volatile bool positionKnown = false;   // homed, and the belts haven't been moved by hand since
     volatile int drawingTopDistance = -1;  // hanger distance the uploaded drawing was made for, -1 = none
     volatile bool drawingFileExists = false;
+    uint32_t drawingFileSize = 0;
     volatile int cachedFreeKb = 0;
     char startError[96] = {0};             // why the last drawing failed to start
     bool wasDrawing = false;
+
+    // Manual belt moves (/command) are requested from the web task and applied in
+    // loop(), together with the retract boost, so a boost can never undo a stop.
+    static constexpr int NO_REQUEST = 2;
+    struct ManualBelt {
+        std::atomic<int> requested{NO_REQUEST}; // -1 retract, 0 stop, 1 extend
+        int dir = 0;                            // main loop: what the belt is doing
+        bool boosted = false;                   // main loop: retracting at the boost speed
+    };
+    ManualBelt leftBelt;
+    ManualBelt rightBelt;
+    volatile unsigned long boostUntilMs = 0; // retract boost lease, renewed while the button is held
 
     // Upload bookkeeping. The UI sends one chunk request at a time.
     int uploadErrorCode = 0;
@@ -57,6 +71,8 @@ class Controller {
     bool atHome();
     void showHomeScreen();
     void updateStorageInfo();
+    void updateManualBelts();
+    void updateManualBelt(ManualBelt &belt, bool left, bool boost);
     bool rejectIfDrawing(AsyncWebServerRequest *request);
     bool rejectIfBusy(AsyncWebServerRequest *request);
 
@@ -71,6 +87,7 @@ class Controller {
     void penUp(AsyncWebServerRequest *request);
     void setPenDistance(AsyncWebServerRequest *request);
     void resetPen(AsyncWebServerRequest *request);
+    void retractBoost(AsyncWebServerRequest *request);
     void estepsCalibration(AsyncWebServerRequest *request);
     void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
     void uploadComplete(AsyncWebServerRequest *request);

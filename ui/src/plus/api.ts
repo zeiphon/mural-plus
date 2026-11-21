@@ -46,6 +46,13 @@ export const setTopDistance = (distance: number): Promise<PlusState> =>
 /** Starts extending the belts to home. Resolves to the expected move time in seconds. */
 export const extendToHome = (): Promise<number> => request('POST', '/extendToHome')
 
+/**
+ * Retracting belts run faster for a moment after each call with `on`, so keep
+ * calling it while the boost is wanted. `false` ends it straight away.
+ */
+export const retractBoost = (on: boolean): Promise<string> =>
+  request('POST', '/retractBoost', { on: on ? '1' : '0' })
+
 export const run = (speed: number): Promise<PlusState> => request('POST', '/run', { speed: String(speed) })
 export const pauseDrawing = (): Promise<PlusState> => request('POST', '/pauseDrawing')
 export const resumeDrawing = (): Promise<PlusState> => request('POST', '/resumeDrawing')

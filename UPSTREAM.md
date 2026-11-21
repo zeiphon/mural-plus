@@ -32,6 +32,7 @@ Each fix is its own branch from `upstream/main` and is merged (not cherry-picked
 | `fix/windows-build` | `build.py` works on Windows (cmd.exe has no `rm`/`cp`) | PR submitted 2026-11-21. Merged into `v2-plus` |
 | `fix/serial-115200` | Serial and monitor at 115200 baud | Ready, not submitted. Merged into `v2-plus` |
 | `fix/partition-table` | NVS no longer overlaps `boot_app0.bin` at 0xe000 | Ready, not submitted. Merged into `v2-plus`. Raise with the maintainer first: boards lose saved settings once |
+| `fix/manual-belt-speed` | `Movement::leftStepper`/`rightStepper` take an optional speed (default unchanged); plus uses it for hold-to-boost retraction | Ready, not submitted. Merged into `v2-plus` |
 | — | Stop tracking `ui/tsconfig.tsbuildinfo` (rewritten by every UI build) | Idea only |
 | — | `Runner` drops the last character of the `d` header, so a whole-number distance (`d12345`) reads ten times too small and progress reaches 100% early | Idea only (fixed in plus) |
 | — | Tools modal: label Park Servo "(0°)" and say where 0° is | Idea only. Edited directly in `v2-plus` (`ToolsModal.tsx`), so expect a small merge conflict if upstream changes that button |
