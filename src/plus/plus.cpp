@@ -2,8 +2,8 @@
 #include <LittleFS.h>
 #include <Preferences.h>
 #include <esp_timer.h>
-#include "pen.h"
-#include "runner.h"
+#include "plus_pen.h"
+#include "plus_runner.h"
 #include "controller.h"
 
 namespace plus {
@@ -16,7 +16,8 @@ namespace {
 
     bool plusActive = false;
     Movement *gMovement = nullptr;
-    Runner *gRunner = nullptr;
+    PlusPen *gPen = nullptr;
+    PlusRunner *gRunner = nullptr;
     Controller *gController = nullptr;
 
     bool loadClassicMode() {
@@ -87,11 +88,9 @@ bool begin(AsyncWebServer *server, Movement *movement, Display *display, bool ho
 
     Serial.println("Mural Plus mode");
     gMovement = movement;
-    // M1 uses upstream's Pen and Runner. M2 replaces them with plus versions.
-    Pen *pen = new Pen();
-    Serial.println("Initialized servo");
-    gRunner = new Runner(movement, pen, display);
-    gController = new Controller(movement, pen, gRunner, display);
+    gPen = new PlusPen();
+    gRunner = new PlusRunner(movement, gPen, display);
+    gController = new Controller(movement, gPen, gRunner, display, hotspotMode, ipAddress);
 
     // API routes first, so polling /getState doesn't make the static handler
     // look for a file on every request.
@@ -118,6 +117,7 @@ bool active() {
 
 void loop() {
     gMovement->runSteppers();
+    gPen->update();
     gRunner->run();
     gController->loop();
 }
