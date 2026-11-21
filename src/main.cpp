@@ -15,6 +15,7 @@
 #include "sdcard.h"
 #include "portalhtml.h"
 #include "phases/phasemanager.h"
+#include "plus/plus.h"
 
 AsyncWebServer server(80);
 
@@ -117,6 +118,9 @@ void setup()
 
     Serial.println("Started mDNS for mural");
 
+    // Mural Plus takes over from here unless classic mode is selected (src/plus/plus.h)
+    if (plus::begin(&server, movement, display, hotspotMode, ipAddress)) return;
+
     pen = new Pen();
     Serial.println("Initialized servo");
 
@@ -191,6 +195,7 @@ void setup()
 
 void loop()
 {
+    if (plus::active()) { plus::loop(); return; }
     movement->runSteppers();
     runner->run();
     phaseManager->getCurrentPhase()->loopPhase();
