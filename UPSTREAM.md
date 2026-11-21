@@ -33,3 +33,4 @@ Each fix is its own branch from `upstream/main` and is merged (not cherry-picked
 | `fix/serial-115200` | Serial and monitor at 115200 baud | Ready, not submitted. Merged into `v2-plus` |
 | `fix/partition-table` | NVS no longer overlaps `boot_app0.bin` at 0xe000 | Ready, not submitted. Merged into `v2-plus`. Raise with the maintainer first: boards lose saved settings once |
 | — | Stop tracking `ui/tsconfig.tsbuildinfo` (rewritten by every UI build) | Idea only |
+| — | `Runner` drops the last character of the `d` header, so a whole-number distance (`d12345`) reads ten times too small and progress reaches 100% early | Idea only (fixed in plus) |
