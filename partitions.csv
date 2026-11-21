@@ -6,10 +6,13 @@
 # where settings such as the pulley diameter are kept. phy_init isn't needed:
 # the Arduino core builds its PHY init data into the app.
 #
-# v2-plus: the app partition is larger than upstream's 1200K, which upstream's
-# firmware alone already fills to 94% (plus mode carries both modes). LittleFS
-# only holds the web UI (about 425K gzipped), since drawings are on the SD card.
+# v2-plus: two app slots, so the firmware can be updated over WiFi (OTA).
+# USB installs always write app0, and boot_app0.bin makes the bootloader start
+# it. Each slot is bigger than upstream's single 1200K app partition, which
+# upstream's firmware alone already fills to 94%. LittleFS only holds the web
+# UI (about 425K gzipped), since drawings are on the SD card.
 nvs,      data, nvs,     0x9000,  0x5000,
 otadata,  data, ota,     0xe000,  0x2000,
-factory,  app,  factory, 0x10000, 2048K,
-spiffs,   data, spiffs,  0x210000, 1984K,
+app0,     app,  ota_0,   0x10000, 1664K,
+app1,     app,  ota_1,   0x1B0000, 1664K,
+spiffs,   data, spiffs,  0x350000, 704K,
