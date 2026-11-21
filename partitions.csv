@@ -1,6 +1,11 @@
 # ESP-IDF Partition Table
 # Name,   Type, SubType, Offset,  Size, Flags
-nvs,      data, nvs,     0x9000,  0x6000,
-phy_init, data, phy,     0xf000,  0x1000,
+# The first 64K follow the Arduino default layout. PlatformIO always writes
+# boot_app0.bin (8K) at 0xe000, so that space is reserved as otadata. NVS and
+# phy_init used to overlap it, so every upload overwrote the last NVS page,
+# where settings such as the pulley diameter are kept. phy_init isn't needed:
+# the Arduino core builds its PHY init data into the app.
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
 factory,  app,  factory, 0x10000, 1200K,
-spiffs, data, spiffs, 0x13C000, 2800K,
+spiffs,   data, spiffs,  0x13C000, 2800K,
