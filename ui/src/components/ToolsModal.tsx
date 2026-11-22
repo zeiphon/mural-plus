@@ -13,7 +13,6 @@ import {
 } from '../api'
 import { showAlert } from './AlertModal'
 import { Button } from './Button'
-import { PlusSettingsButton } from '../plus/settings/PlusSettingsButton'
 
 interface ToolsModalProps {
   isOpen: boolean
@@ -91,7 +90,6 @@ export function ToolsModal({ isOpen, onClose }: ToolsModalProps) {
             ✕
           </button>
         </div>
-        <PlusSettingsButton />
 
         <div className="space-y-1">
           <div className="flex justify-between items-center">
@@ -125,12 +123,9 @@ export function ToolsModal({ isOpen, onClose }: ToolsModalProps) {
           />
         </div>
 
-        <div className="space-y-1">
-          <Button onClick={() => setServo(0)} variant="secondary">
-            Park Servo (0°)
-          </Button>
-          <p className="text-xs text-gray-500">Turns the servo to 0°, the end of its travel towards the wall.</p>
-        </div>
+        <Button onClick={() => setServo(0)} variant="secondary">
+          Park Servo
+        </Button>
 
         <div className="space-y-1">
           <div>

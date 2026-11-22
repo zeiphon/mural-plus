@@ -6,6 +6,7 @@ import { showAlert } from '../../components/AlertModal'
 import { leftRetractDown, leftStop, rightRetractDown, rightStop } from '../../api'
 import { extendToHome, getPlusState, retractBoost, delay, errorMessage } from '../api'
 import type { PlusState } from '../types'
+import { Help } from '../components/Help'
 
 interface Props {
   state: PlusState
@@ -192,10 +193,10 @@ export function BeltsScreen({ state, onDone }: Props) {
             >
               {boosting ? 'Retracting faster…' : 'Hold to retract faster'}
             </button>
-            <p className="text-xs text-gray-500">
-              For long retractions. Let go before the loops reach the screws, so the motors stall at the normal speed.
-              The belts stop if you leave this page or lock the phone.
-            </p>
+            <Help label="Let go before the loops reach the screws">
+              <p>For long retractions. Letting go early means the motors stall at the normal speed.</p>
+              <p>The belts stop if you leave this page or lock the phone.</p>
+            </Help>
           </div>
           <p className="text-xs text-gray-500">
             Make sure the belts are unobstructed and the motors don't skip while extending, or the drawing accuracy may

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Toggle } from '../../components/Toggle'
 import { showAlert } from '../../components/AlertModal'
+import { setServo } from '../../api'
 import {
   getPlusState,
   adjustPen,
@@ -13,13 +14,25 @@ import {
   type PenSettingsUpdate,
 } from '../api'
 import type { PlusState } from '../types'
+import { Help } from '../components/Help'
+import { NumberField, SmallButton } from '../components/Controls'
 import { FirmwareSettings } from './FirmwareSettings'
+import { BeltSettings } from './BeltSettings'
 
 const SPEED_STEP = 50 // steps/s, same step as the speed slider
 
-/** Pen and drawing settings. The pen angles and drawing speed can be changed while drawing. */
+/**
+ * Plus mode's settings: pen, belts, drawing and firmware. The pen angles and
+ * drawing speed can be changed while drawing; the rest is hidden or off then.
+ */
 export function PlusSettings() {
   const [state, setState] = useState<PlusState | null>(null)
+
+  function reload() {
+    getPlusState()
+      .then(setState)
+      .catch(() => {})
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -51,6 +64,8 @@ export function PlusSettings() {
   const drawing = state.drawingActive
   // Same rule as the firmware: towards the wall is whichever way the down angle lies.
   const towardsWall = pen.calibrated && pen.down > pen.up ? 1 : -1
+  // Mural clamps the park angle (0°) to the soft limits.
+  const parkAngle = Math.max(0, pen.min)
 
   return (
     <div className="space-y-6">
@@ -82,11 +97,20 @@ export function PlusSettings() {
 
         {!drawing && (
           <>
-            <div className="flex gap-2">
-              <SmallButton onClick={() => penUp().catch(reportError)}>Test pen up</SmallButton>
-              <SmallButton onClick={() => penDown().catch(reportError)} disabled={!pen.calibrated}>
-                Test pen down
-              </SmallButton>
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <SmallButton onClick={() => penUp().catch(reportError)}>Test pen up</SmallButton>
+                <SmallButton onClick={() => penDown().catch(reportError)} disabled={!pen.calibrated}>
+                  Test pen down
+                </SmallButton>
+                <SmallButton onClick={() => setServo(0).catch(reportError)}>Park servo ({parkAngle}°)</SmallButton>
+              </div>
+              <Help label="About parking the servo">
+                <p>
+                  Park turns the servo to 0°, the end of its travel towards the wall, for example to fit the servo horn.
+                  {parkAngle > 0 && ` The min angle below stops it at ${parkAngle}°.`}
+                </p>
+              </Help>
             </div>
             <ServoForm
               key={`${pen.speed}/${pen.min}/${pen.max}`} // back to the saved values after a save
@@ -102,6 +126,12 @@ export function PlusSettings() {
         )}
       </Section>
 
+      {!drawing && (
+        <Section title="Belts">
+          <BeltSettings state={state} onChange={reload} />
+        </Section>
+      )}
+
       <Section title="Drawing">
         {drawing ? (
           <div className="flex items-center justify-between gap-3">
@@ -116,16 +146,18 @@ export function PlusSettings() {
             </div>
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-2">
             <Toggle
               label="Keep this page working while drawing"
               checked={state.settings.webWhileDrawing}
               onChange={(on) => update(() => setWebWhileDrawing(on))}
             />
-            <p className="text-xs text-gray-500">
-              If it's off, Mural stops its web server during a drawing, like upstream Mural, and the page reconnects when
-              the drawing ends.
-            </p>
+            <Help label="What happens if it's off">
+              <p>
+                Mural stops its web server during a drawing, like upstream Mural, and the page reconnects when the
+                drawing ends.
+              </p>
+            </Help>
           </div>
         )}
       </Section>
@@ -168,9 +200,9 @@ function ServoForm({ state, onSave }: { state: PlusState; onSave: (update: PenSe
         <NumberField label="Min angle" value={min} onChange={setMin} />
         <NumberField label="Max angle" value={max} onChange={setMax} />
       </div>
-      <p className="text-xs text-gray-500">
-        The servo never moves outside the min and max angles, so it can't push against the end of its travel.
-      </p>
+      <Help label="About the servo limits">
+        <p>The servo never moves outside the min and max angles, so it can't push against the end of its travel.</p>
+      </Help>
       {changed && (
         <SmallButton onClick={handleSave} primary>
           Save servo settings
@@ -223,35 +255,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <label className="space-y-1">
-      <span className="block text-xs text-gray-500">{label}</span>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-      />
-    </label>
-  )
-}
 
-function SmallButton(props: { onClick: () => void; disabled?: boolean; primary?: boolean; children: ReactNode }) {
-  return (
-    <button
-      onClick={props.onClick}
-      disabled={props.disabled}
-      className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-        props.primary
-          ? 'bg-cyan-600 enabled:hover:bg-cyan-500 text-white'
-          : 'bg-gray-700 enabled:hover:bg-gray-600 text-gray-200'
-      }`}
-    >
-      {props.children}
-    </button>
-  )
-}
 
 async function reportError(err: unknown) {
   await showAlert(errorMessage(err))

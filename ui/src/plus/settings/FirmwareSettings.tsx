@@ -4,6 +4,7 @@ import { showAlert } from '../../components/AlertModal'
 import { errorMessage, getOtaStatus } from '../api'
 import { installUpdate, readUpdateFile, type InstallStep, type UpdateFile } from '../update'
 import type { OtaStatus } from '../types'
+import { Help } from '../components/Help'
 
 const STEP_LABELS: Record<InstallStep, string> = {
   ui: 'Uploading the web UI',
@@ -108,9 +109,9 @@ export function FirmwareSettings({ drawing }: { drawing: boolean }) {
             </div>
           )}
           {blocked && <p className="text-xs text-gray-500">{blocked}</p>}
-          <p className="text-xs text-gray-500">
-            Settings and the drawing are kept. If the new version doesn't start properly, Mural goes back to this one.
-          </p>
+          <Help label="What an update keeps">
+            <p>Settings and the drawing are kept. If the new version doesn't start properly, Mural goes back to this one.</p>
+          </Help>
         </>
       )}
     </div>

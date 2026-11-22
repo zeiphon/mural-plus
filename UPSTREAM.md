@@ -22,7 +22,7 @@ The watched files are listed in `scripts/upstream_watch.py`. They are upstream f
 Small edits that stay in this fork, so they can conflict when upstream changes the same lines. The full list, with the reasons, is section 2.2 of `V2_PORT_PLAN.md`.
 
 - `src/main.cpp`: the `plus::begin` and `plus::loop` hooks.
-- `ui/src/main.tsx`: renders `Root`. `ui/src/components/ToolsModal.tsx`: the plus settings button and the Park Servo label.
+- `ui/src/main.tsx`: renders `Root`. Plus mode doesn't use `ui/src/components/ToolsModal.tsx`: its own settings modal has the motor jog, Park Servo, pulley diameter and e-steps.
 - `platformio.ini`, `partitions.csv`: build flags, scripts and the OTA-ready layout.
 
 ## Upstream internals plus relies on
@@ -50,4 +50,4 @@ Each fix is its own branch from `upstream/main` and is merged (not cherry-picked
 | `fix/manual-belt-speed` | `Movement::leftStepper`/`rightStepper` take an optional speed (default unchanged); plus uses it for hold-to-boost retraction | Ready, not submitted. Merged into `v2-plus` |
 | — | Stop tracking `ui/tsconfig.tsbuildinfo` (rewritten by every UI build) | Idea only |
 | — | `Runner` drops the last character of the `d` header, so a whole-number distance (`d12345`) reads ten times too small and progress reaches 100% early | Idea only (fixed in plus) |
-| — | Tools modal: label Park Servo "(0°)" and say where 0° is | Idea only. Edited directly in `v2-plus` (`ToolsModal.tsx`), so expect a small merge conflict if upstream changes that button |
+| — | Tools modal: label Park Servo "(0°)" and say where 0° is | Idea only. Plus mode has its own Park servo button, so `ToolsModal.tsx` is unchanged in `v2-plus` |

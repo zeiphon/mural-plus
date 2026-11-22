@@ -5,6 +5,7 @@ import { ProgressBar } from '../../components/ProgressBar'
 import { showAlert } from '../../components/AlertModal'
 import { getPlusState, pauseDrawing, resumeDrawing, stopDrawing, delay, errorMessage } from '../api'
 import type { DrawingState, PlusState } from '../types'
+import { Help } from '../components/Help'
 
 interface Props {
   initialState: PlusState
@@ -111,10 +112,13 @@ export function DrawingScreen({ initialState, onFinished }: Props) {
           Stop
         </Button>
       </div>
-      <p className="text-xs text-gray-500">
-        Pausing lifts the pen after the current short move. Resuming puts it back down and carries on from the same
-        spot. Pen too light or too firm? Adjust it under ⚙ without stopping.
-      </p>
+      <Help label="About pausing and adjusting the pen">
+        <p>
+          Pausing lifts the pen after the current short move. Resuming puts it back down and carries on from the same
+          spot.
+        </p>
+        <p>Pen too light or too firm? Adjust it under ⚙ without stopping.</p>
+      </Help>
       {!state.settings.webWhileDrawing && (
         <p className="text-xs text-yellow-400">
           This page is switched off while drawing (in Settings), so it can't show progress. It reconnects when the

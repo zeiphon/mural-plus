@@ -6,7 +6,6 @@ import type { RendererDefinition } from '../renderers/index'
 import { getRenderersByInputType } from '../renderers/index'
 import { showAlert, showErrorAlert } from '../components/AlertModal'
 import { Card } from '../components/Card'
-import { ToolsModal } from '../components/ToolsModal'
 import { LoadingScreen } from '../screens/LoadingScreen'
 import { InputSelectScreen } from '../screens/InputSelectScreen'
 import { SvgUploadScreen } from '../screens/SvgUploadScreen'
@@ -45,7 +44,6 @@ type View =
 export function PlusApp() {
   const [state, setState] = useState<PlusState | null>(null)
   const [view, setView] = useState<View>('loading')
-  const [toolsOpen, setToolsOpen] = useState(false)
   const [plusSettingsOpen, setPlusSettingsOpen] = useState(false)
   // Where the Diagnostics page goes back to
   const [returnView, setReturnView] = useState<View>('overview')
@@ -272,8 +270,8 @@ export function PlusApp() {
       break
   }
 
-  // While drawing (including Diagnostics opened from the drawing), only plus's
-  // pen and drawing settings apply, and upstream's Tools modal isn't mounted.
+  // While drawing (including Diagnostics opened from the drawing), the settings
+  // only show what can change during a drawing.
   const duringDrawing = view === 'drawing' || (view === 'diagnostics' && returnView === 'drawing')
   const settled = !duringDrawing && view !== 'UploadProgress' && view !== 'restarting'
   const footer = (
@@ -313,7 +311,7 @@ export function PlusApp() {
       )}
       {(settled || duringDrawing) && (
         <button
-          onClick={() => (duringDrawing ? setPlusSettingsOpen(true) : setToolsOpen(true))}
+          onClick={() => setPlusSettingsOpen(true)}
           className="fixed top-4 right-4 text-gray-400 hover:text-gray-200 transition-colors text-2xl leading-none z-10"
           aria-label="Open settings"
         >
@@ -321,18 +319,13 @@ export function PlusApp() {
         </button>
       )}
       {screen}
-      <PlusSettingsModal isOpen={plusSettingsOpen} onClose={() => setPlusSettingsOpen(false)} />
-      {/* Only mounted while not drawing: closing it sends motor stops, which
-          Mural rejects while drawing. */}
-      {settled && (
-        <ToolsModal
-          isOpen={toolsOpen}
-          onClose={() => {
-            setToolsOpen(false)
-            refresh()
-          }}
-        />
-      )}
+      <PlusSettingsModal
+        isOpen={plusSettingsOpen}
+        onClose={() => {
+          setPlusSettingsOpen(false)
+          refresh() // moving the belts or changing the pulley diameter forgets the belt position
+        }}
+      />
     </Page>
   )
 }

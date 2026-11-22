@@ -3,11 +3,14 @@ import { Toggle } from '../../components/Toggle'
 import { showAlert } from '../../components/AlertModal'
 import { getDiagnostics, getLog, servoAction, setLogDrawingMoves, delay, errorMessage } from '../api'
 import type { Diagnostics, MotorDriver, ServoAction } from '../types'
+import { Help } from '../components/Help'
+import { SmallButton } from '../components/Controls'
+import { MotorControls } from '../components/MotorControls'
 
 const POLL_MS = 2000
 const LOG_POLL_MS = 3000
 
-/** Readouts, servo tests and the log, for troubleshooting. Works while drawing (tests are disabled then). */
+/** Readouts, servo and motor tests and the log, for troubleshooting. Works while drawing (tests are disabled then). */
 export function DiagnosticsScreen() {
   const [diag, setDiag] = useState<Diagnostics | null>(null)
   const [lost, setLost] = useState(false)
@@ -92,9 +95,9 @@ export function DiagnosticsScreen() {
         <>
           <BrownoutWarning diag={diag} />
           <ServoSection diag={diag} onAction={act} />
-          <SystemSection diag={diag} onLogMoves={toggleLogMoves} />
-          <MotorsSection diag={diag} />
+          <MotorsSection diag={diag} onChange={() => refreshRef.current()} />
           <DriversSection diag={diag} />
+          <SystemSection diag={diag} onLogMoves={toggleLogMoves} />
           <StorageSection diag={diag} />
         </>
       )}
@@ -125,10 +128,12 @@ function ServoSection({ diag, onAction }: { diag: Diagnostics; onAction: (action
 
   return (
     <Section title="Servo and pen">
-      <p className="text-xs text-gray-500">
-        A hobby servo gives no feedback, so these are the angles Mural sent, not where the horn really is. If the horn
-        isn't where it should be, or it buzzes while holding, it's probably straining or binding.
-      </p>
+      <Help label="About these readings">
+        <p>
+          A hobby servo gives no feedback, so these are the angles Mural sent, not where the horn really is. If the horn
+          isn't where it should be, or it buzzes while holding, it's probably straining or binding.
+        </p>
+      </Help>
       <Rows>
         <Row label="Position">
           {s.position}
@@ -194,10 +199,11 @@ function ServoSection({ diag, onAction }: { diag: Diagnostics; onAction: (action
           </SmallButton>
         )}
       </div>
-      <p className="text-xs text-gray-500">
-        "Move to" stays within the limits. Release stops the pulses so the horn can be turned by hand; the next move takes
-        hold again. The cycle test lowers and lifts the pen repeatedly, to check for binding or brownouts.
-      </p>
+      <Help label="About the servo tests">
+        <p>"Move to" stays within the limits.</p>
+        <p>Release stops the pulses so the horn can be turned by hand; the next move takes hold again.</p>
+        <p>The cycle test lowers and lifts the pen repeatedly, to check for binding or brownouts.</p>
+      </Help>
     </Section>
   )
 }
@@ -238,19 +244,22 @@ function SystemSection({ diag, onLogMoves }: { diag: Diagnostics; onLogMoves: (o
           {sys.hotspot ? `Hotspot, ${sys.ip}` : `${sys.ip}${sys.wifiRssi !== undefined ? `, ${formatRssi(sys.wifiRssi)}` : ''}`}
         </Row>
       </Rows>
-      <div className="space-y-1">
+      <div className="space-y-2">
         <Toggle label="Log every drawing move" checked={sys.logDrawingMoves} onChange={onLogMoves} />
-        <p className="text-xs text-gray-500">
-          Adds a line to the log below for each move and pen lift of a drawing. Useful for finding where a drawing went
-          wrong, but it soon pushes older lines out of the log.
-        </p>
+        <Help label="About logging moves">
+          <p>
+            Adds a line to the log below for each move and pen lift of a drawing. Useful for finding where a drawing
+            went wrong, but it soon pushes older lines out of the log.
+          </p>
+        </Help>
       </div>
     </Section>
   )
 }
 
-function MotorsSection({ diag }: { diag: Diagnostics }) {
+function MotorsSection({ diag, onChange }: { diag: Diagnostics; onChange: () => void }) {
   const m = diag.motors
+  const disabled = diag.system.drawing
   return (
     <Section title="Motors and position">
       <Rows>
@@ -268,6 +277,16 @@ function MotorsSection({ diag }: { diag: Diagnostics }) {
           {m.boosting ? ' (faster)' : ''}
         </Row>
       </Rows>
+
+      {disabled && <p className="text-xs text-yellow-400">The motor controls are off while drawing.</p>}
+      <MotorControls disabled={disabled} onChange={onChange} />
+      <Help label="About moving the belts by hand">
+        <p>Each motor runs until you press Stop. A retracting belt ends with the motor stalling against the stops.</p>
+        <p>
+          Moving a belt by hand means Mural no longer knows the belt position, so extend to home again before drawing.
+          The motors stop when you leave this page or lock the phone.
+        </p>
+      </Help>
     </Section>
   )
 }
@@ -290,10 +309,12 @@ function DriversSection({ diag }: { diag: Diagnostics }) {
   ]
   return (
     <Section title="Motor drivers">
-      <p className="text-xs text-gray-500">
-        Read from the TMC2209 drivers. "Open load" can show up at standstill or high speed without anything being wrong;
-        it matters if it stays on while the motor turns slowly.
-      </p>
+      <Help label="About these readings">
+        <p>
+          Read from the TMC2209 drivers. "Open load" can show up at standstill or high speed without anything being
+          wrong; it matters if it stays on while the motor turns slowly.
+        </p>
+      </Help>
       <dl className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_minmax(0,3fr)] gap-x-4 gap-y-1.5 text-sm">
         <dt />
         <dd className="text-gray-400 font-medium">{left.name}</dd>
@@ -414,10 +435,12 @@ function LogSection(props: { log: string | null; autoLog: boolean; onAutoLog: (o
 
   return (
     <Section title="Log">
-      <p className="text-xs text-gray-500">
-        Mural Plus's own messages. They survive a crash or restart, but not a power cut. Times are seconds since that
-        boot.
-      </p>
+      <Help label="About the log">
+        <p>
+          Mural Plus's own messages. They survive a crash or restart, but not a power cut. Times are seconds since that
+          boot.
+        </p>
+      </Help>
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex-1 min-w-[10rem]">
           <Toggle label="Auto-refresh" checked={props.autoLog} onChange={props.onAutoLog} />
@@ -463,17 +486,6 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function SmallButton(props: { onClick: () => void; disabled?: boolean; children: ReactNode }) {
-  return (
-    <button
-      onClick={props.onClick}
-      disabled={props.disabled}
-      className="rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-gray-700 enabled:hover:bg-gray-600 text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
-    >
-      {props.children}
-    </button>
-  )
-}
 
 function NumberInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
