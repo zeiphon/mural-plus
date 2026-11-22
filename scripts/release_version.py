@@ -9,10 +9,10 @@ import subprocess
 
 TAG_PATTERN = "v2-plus*"
 
-# Tracked files that get rewritten by the build or the IDE rather than edited,
-# so changes to them don't make a build "dirty": the UI build (tsc -b) rewrites
-# the tsbuildinfo, and the PlatformIO IDE rewrites launch.json with local paths.
-GENERATED_FILES = ["ui/tsconfig.tsbuildinfo", ".vscode/launch.json"]
+# Tracked files that get rewritten by the IDE rather than edited, so changes to
+# them don't make a build "dirty": the PlatformIO IDE rewrites launch.json with
+# local paths.
+GENERATED_FILES = [".vscode/launch.json"]
 
 
 def _git(project_dir, *args):
