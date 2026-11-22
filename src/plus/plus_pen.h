@@ -13,7 +13,10 @@ constexpr int SERVO_PIN = 21; // same as upstream's Pen
 struct PenSettings {
     int upAngle = 80;
     int downAngle = -1;         // -1 = not calibrated
-    int minAngle = 0;           // soft limits: nothing commands the servo outside these
+    // Soft limits: nothing commands the servo outside these. 0 deg is towards the
+    // wall, and the rack-and-pinion pen holder is at the end of its travel well
+    // before that, so the minimum stops it being driven into the end stop.
+    int minAngle = 20;
     int maxAngle = 180;
     int speedDegPerSec = 90;
     bool releaseWhenUp = false; // stop sending pulses once the pen is up (the servo goes limp)
