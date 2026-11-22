@@ -1,0 +1,154 @@
+<!doctype html>
+<!--
+  Web flasher template. scripts/package_release.py fills in the {{...}} placeholders
+  and CI publishes the result to GitHub Pages. Preview it with:
+      python scripts/package_release.py && python -m http.server -d dist/site
+  (Web Serial also works on http://localhost.)
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mural Plus Installer</title>
+  <meta name="description" content="Install the Mural Plus firmware on a v2 Mural from your browser.">
+  <script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+  <style>
+    :root {
+      --bg: #f6f5f2;
+      --surface: #ffffff;
+      --text: #1d1d1b;
+      --muted: #5f5e59;
+      --border: #dddbd4;
+      --accent: #2f5f9e;
+      --accent-text: #ffffff;
+      --warn-bg: #fdf3e1;
+      --warn-text: #7a4b00;
+      --code-bg: #efede8;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161615;
+        --surface: #20201e;
+        --text: #ecebe6;
+        --muted: #a3a29b;
+        --border: #3a3936;
+        --accent: #7aa7e6;
+        --accent-text: #0f1d30;
+        --warn-bg: #3a2c12;
+        --warn-text: #f3cf8a;
+        --code-bg: #2a2a27;
+        color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+    h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 4px; }
+    h2 { font-size: 1.15rem; margin: 40px 0 8px; }
+    h3 { font-size: 1.05rem; margin: 0 0 6px; }
+    p, ul, ol { margin: 0 0 12px; }
+    li { margin-bottom: 4px; }
+    a { color: var(--accent); }
+    .meta { color: var(--muted); margin-bottom: 24px; }
+    .notice {
+      background: var(--warn-bg); color: var(--warn-text);
+      border-radius: 8px; padding: 12px 14px; margin: 16px 0;
+    }
+    .choices { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; margin-top: 16px; }
+    @media (max-width: 620px) { .choices { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px; display: flex; flex-direction: column;
+    }
+    .card p { color: var(--muted); font-size: 0.95rem; }
+    .card .spacer { flex: 1; }
+    .btn {
+      appearance: none; border: 0; cursor: pointer; width: 100%;
+      background: var(--accent); color: var(--accent-text);
+      font: inherit; font-weight: 600; padding: 10px 14px; border-radius: 8px;
+    }
+    .btn.secondary { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+    .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    code, pre { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.88rem; }
+    code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+    pre {
+      background: var(--code-bg); padding: 12px 14px; border-radius: 8px;
+      overflow-x: auto; margin: 0 0 12px; white-space: pre;
+    }
+    footer { margin-top: 48px; color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Mural Plus</h1>
+  <div class="meta">Web installer &middot; version {{VERSION}} &middot; <a href="{{REPO_URL}}">source</a></div>
+
+  <p>Firmware for <strong>v2 Mural hardware</strong> (the FluidNC controller board, with an SD card and a small screen), with a reworked setup, live drawing controls, a diagnostics page and updates from the browser. It won't work on v1.1 boards.</p>
+  <p>Already running Mural Plus? You can update without a cable: download <code>{{UPDATE_BIN}}</code> from the <a href="{{REPO_URL}}/releases">releases page</a>, then install it from Mural's settings, under <strong>Pen, drawing and firmware settings</strong>.</p>
+
+  <h2>Before you start</h2>
+  <ul>
+    <li>Use <strong>Chrome or Edge on a computer</strong>. The installer needs Web Serial, which iOS browsers don't have.</li>
+    <li>Plug the ESP32 in with a USB cable that carries data. Some cables only carry power.</li>
+    <li>Close anything else using the port, such as the PlatformIO serial monitor in VS Code.</li>
+    <li>If no port shows up, install the USB driver for your board's chip: <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers">CP210x</a> or <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html">CH340</a>.</li>
+  </ul>
+
+  <h2>Install</h2>
+  <div class="choices">
+    <div class="card">
+      <h3>Fresh install</h3>
+      <p>Erases the board, including settings and calibration. Use this the first time, or when coming from upstream Mural.</p>
+      <div class="spacer"></div>
+      <esp-web-install-button manifest="manifest-install.json">
+        <button slot="activate" class="btn">Fresh install</button>
+        <span slot="unsupported" class="notice">Your browser can't flash devices. Open this page in Chrome or Edge on a computer.</span>
+        <span slot="not-allowed" class="notice">Flashing only works when this page is opened over https.</span>
+      </esp-web-install-button>
+    </div>
+    <div class="card">
+      <h3>Update</h3>
+      <p>Keeps settings, calibration and the drawing. When the installer asks, <strong>leave &ldquo;Erase device&rdquo; unticked</strong>.</p>
+      <div class="spacer"></div>
+      <esp-web-install-button manifest="manifest-update.json">
+        <button slot="activate" class="btn secondary">Update</button>
+        <span slot="unsupported" class="notice">Your browser can't flash devices. Open this page in Chrome or Edge on a computer.</span>
+        <span slot="not-allowed" class="notice">Flashing only works when this page is opened over https.</span>
+      </esp-web-install-button>
+    </div>
+  </div>
+
+  <h2>After installing</h2>
+  <ol>
+    <li>Mural restarts. After a fresh install it has no WiFi details, so it opens its own WiFi network called <strong>Mural</strong>.</li>
+    <li>Join that network from your phone or computer. A setup page should open. If it doesn't, go to <code>http://192.168.4.1</code>.</li>
+    <li>Pick your WiFi network and enter its password. Mural then joins your network.</li>
+    <li>Open <a href="http://mural.local">http://mural.local</a>. If that doesn't load, look up Mural's IP address in your router's list of devices.</li>
+  </ol>
+  <p>After an update, Mural reconnects to your WiFi by itself.</p>
+
+  <h2>If the installer can't connect</h2>
+  <ul>
+    <li>Hold the <strong>BOOT</strong> button on the ESP32 while the installer says it's connecting, then let go once it starts writing.</li>
+    <li>Try another USB cable or port.</li>
+  </ul>
+
+  <h2>Flashing manually</h2>
+  <p>The same files are on the <a href="{{REPO_URL}}/releases">releases page</a>. With <a href="https://docs.espressif.com/projects/esptool/">esptool</a>:</p>
+  <p>Fresh install (erases settings):</p>
+  <pre>esptool.py --chip esp32 write_flash 0x0 {{FULL_BIN}}</pre>
+  <p>Update (keeps settings). This also rewrites the bootloader, partition table and <code>boot_app0.bin</code>, so the board starts this firmware even if a browser update had switched it to the other firmware slot:</p>
+  <pre>esptool.py --chip esp32 write_flash {{USB_UPDATE_ARGS}}</pre>
+
+  <footer>
+    Mural Plus is a fork of <a href="https://github.com/nikivanov/mural">nikivanov/mural</a>. Installer powered by <a href="https://esphome.github.io/esp-web-tools/">ESP Web Tools</a>.
+  </footer>
+</main>
+</body>
+</html>

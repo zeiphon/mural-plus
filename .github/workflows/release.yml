@@ -1,0 +1,90 @@
+name: Release
+
+# Pushing a tag like v2-plus.1 builds the firmware, creates a GitHub release with
+# the .bin files attached, and publishes the web installer to GitHub Pages.
+# Running it by hand (Actions tab > Release > Run workflow) only builds, and keeps the
+# files as a downloadable workflow artifact, which is handy for testing a build.
+
+on:
+  push:
+    tags: ["v2-plus*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create the release
+  pages: write      # deploy the installer
+  id-token: write   # required by deploy-pages
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # git describe needs the tags for the version string
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v6
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO and esptool
+        run: pip install platformio esptool==4.9.0
+
+      # canvas is a native module the browser worker doesn't need, and it doesn't
+      # build on every Node version (CLAUDE.md), hence --ignore-scripts.
+      - name: Install web worker dependencies
+        working-directory: worker
+        run: npm install --ignore-scripts
+
+      - name: Install web UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build and package
+        run: python scripts/package_release.py
+
+      - name: Keep build files
+        uses: actions/upload-artifact@v7
+        with:
+          name: firmware
+          path: dist/
+
+      - name: Upload installer site
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist/site
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/release/*.bin
+          body_path: dist/RELEASE_NOTES.md
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+  deploy:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
