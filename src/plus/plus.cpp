@@ -10,6 +10,8 @@
 #include "persist.h"
 #include "diagnostics.h"
 #include "movement_access.h"
+#include "ota.h"
+#include "restart.h"
 
 // main.cpp's "use without WiFi" flag. It's cleared at boot, so a restart goes
 // back to the WiFi flow unless it's set again with main.cpp's magic value.
@@ -46,30 +48,20 @@ namespace {
         prefs.end();
     }
 
+    bool gHotspotMode = false;
+
     void restartNow(void *) {
         esp_restart();
-    }
-
-    // Restart shortly, so the response that triggered it can still be sent.
-    void restartSoon() {
-        static esp_timer_handle_t timer = nullptr;
-        if (!timer) {
-            esp_timer_create_args_t args = {};
-            args.callback = restartNow;
-            args.name = "plus_restart";
-            esp_timer_create(&args, &timer);
-        }
-        esp_timer_start_once(timer, 500 * 1000);
     }
 
     // GET  /plus/mode  -> {"mode":"plus"|"classic"}
     // POST /plus/mode  mode=plus|classic, then restarts
     // Registered in both modes, so the UI can tell which one is running and switch.
-    void registerModeRoutes(AsyncWebServer *server, bool classic, bool hotspotMode) {
+    void registerModeRoutes(AsyncWebServer *server, bool classic) {
         server->on("/plus/mode", HTTP_GET, [classic](AsyncWebServerRequest *request) {
             request->send(200, "application/json", classic ? "{\"mode\":\"classic\"}" : "{\"mode\":\"plus\"}");
         });
-        server->on("/plus/mode", HTTP_POST, [hotspotMode](AsyncWebServerRequest *request) {
+        server->on("/plus/mode", HTTP_POST, [](AsyncWebServerRequest *request) {
             String mode = request->arg("mode");
             if (mode != "plus" && mode != "classic") {
                 request->send(400, "text/plain", "mode must be plus or classic");
@@ -84,9 +76,6 @@ namespace {
                 persist.clearDrawing();
             }
             saveClassicMode(mode == "classic");
-            if (hotspotMode) {
-                hotspotBootFlag = HOTSPOT_BOOT_MAGIC; // come back on the hotspot, not the WiFi flow
-            }
             Log.printf("Switching to %s mode, restarting\n", mode.c_str());
             request->send(200, "text/plain", "Restarting");
             restartSoon();
@@ -94,18 +83,48 @@ namespace {
     }
 }
 
-bool begin(AsyncWebServer *server, Movement *movement, Display *display, bool hotspotMode, const String &ipAddress) {
-    bool classic = loadClassicMode();
-    registerModeRoutes(server, classic, hotspotMode);
-    if (classic) {
-        Log.println("Classic mode (upstream phases)");
-        return false;
+void keepHotspotAcrossRestart() {
+    if (gHotspotMode) {
+        hotspotBootFlag = HOTSPOT_BOOT_MAGIC; // come back on the hotspot, not the WiFi flow
     }
+}
+
+void restartSoon() {
+    keepHotspotAcrossRestart();
+    static esp_timer_handle_t timer = nullptr;
+    if (!timer) {
+        esp_timer_create_args_t args = {};
+        args.callback = restartNow;
+        args.name = "plus_restart";
+        esp_timer_create(&args, &timer);
+    }
+    esp_timer_start_once(timer, 500 * 1000);
+}
+
+bool begin(AsyncWebServer *server, Movement *movement, Display *display, bool hotspotMode, const String &ipAddress) {
+    gHotspotMode = hotspotMode;
 
     // The log keeps what came before a crash or software restart, but not a power-on.
     int resetReason = esp_reset_reason();
     Log.begin(Persist::resetReasonName(resetReason), resetReason != ESP_RST_POWERON);
-    Log.printf("Mural Plus mode, firmware %s (built %s %s)\n", MURAL_FW_VERSION, __DATE__, __TIME__);
+    Log.printf("Firmware %s (built %s %s)\n", MURAL_FW_VERSION, __DATE__, __TIME__);
+
+    // Finishes or rolls back a firmware update before anything uses the web UI files.
+    ota.beginBoot();
+
+    bool classic = loadClassicMode();
+    registerModeRoutes(server, classic);
+    if (classic) {
+        Log.println("Classic mode (upstream phases)");
+        // Before upstream's routes, so the recovery page comes ahead of upstream's static files.
+        ota.registerRoutes(server, [movement]() -> const char * {
+            return movement->isMoving() ? "Mural is moving, try again when it has stopped" : nullptr;
+        });
+        ota.confirm(); // upstream's setup can't fail from here, so a new firmware is good
+        return false;
+    }
+
+    Log.println("Mural Plus mode");
     gMovement = movement;
     persist.begin();
     MovementAccess::clearDriverFlags(movement); // so the Diagnostics page shows driver restarts since boot
@@ -118,12 +137,18 @@ bool begin(AsyncWebServer *server, Movement *movement, Display *display, bool ho
     // look for a file on every request.
     gController->registerRoutes(server);
     gDiagnostics->registerRoutes(server);
+    ota.registerRoutes(server, []() -> const char * {
+        if (gController->isDrawing()) return "Not available while drawing";
+        if (strcmp(gController->statusName(), "idle") != 0) return "Mural is moving, try again when it has stopped";
+        return nullptr;
+    });
     server->serveStatic("/", LittleFS, "/www/").setDefaultFile("index.html").setCacheControl("no-cache");
     server->onNotFound([](AsyncWebServerRequest *request) {
         request->send(404, "text/plain", "Not found");
     });
     server->begin();
     Log.println("Server started");
+    ota.confirm(); // a new firmware got as far as serving the web UI
 
     if (hotspotMode) {
         display->showHotspotReady(ipAddress);

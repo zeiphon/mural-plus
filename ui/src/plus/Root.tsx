@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import App from '../App'
 import { LoadingScreen } from '../screens/LoadingScreen'
 import { showAlert } from '../components/AlertModal'
-import { getMode, setMode, reloadWhenBack, errorMessage, type Mode } from './api'
+import { getMode, setMode, reloadWhenBack, errorMessage, getOtaStatus, dismissOtaResult, type Mode } from './api'
+import { describeResult } from './update'
 import { PlusApp } from './PlusApp'
 import { Page } from './Page'
 
@@ -12,6 +13,14 @@ export default function Root() {
 
   useEffect(() => {
     getMode().then((m) => setModeState(m ?? 'unknown'))
+    // How the last firmware update went, shown once in either mode
+    getOtaStatus()
+      .then(async (s) => {
+        if (!s.result) return
+        await showAlert(describeResult(s.result))
+        await dismissOtaResult()
+      })
+      .catch(() => {})
   }, [])
 
   if (mode === 'loading') {

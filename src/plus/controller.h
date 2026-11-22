@@ -28,6 +28,8 @@ class Controller {
     void registerRoutes(AsyncWebServer *server);
     void loop();
     bool isDrawing() { return runner->isRunning() || pendingStartSpeed > 0; }
+    // "idle", "starting", "homing", "moving", or the runner's state while drawing
+    const char *statusName();
 
     private:
     Movement *movement;
@@ -71,7 +73,6 @@ class Controller {
     String uploadError;
     bool uploadIsLastChunk = false;
 
-    const char *statusName();
     bool drawingReady();
     bool atHome();
     void showHomeScreen();

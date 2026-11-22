@@ -7,10 +7,7 @@
 #include "plus_runner.h"
 #include "controller.h"
 
-// Set at build time from git by scripts/fw_version.py.
-#ifndef MURAL_FW_VERSION
-#define MURAL_FW_VERSION "unknown"
-#endif
+#include "version.h"
 
 namespace plus {
 

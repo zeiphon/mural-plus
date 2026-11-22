@@ -149,3 +149,24 @@ export interface MotorDriver {
 }
 
 export type ServoAction = 'up' | 'down' | 'angle' | 'nudge' | 'release' | 'cycle' | 'stop'
+
+/** GET /ota/status (src/plus/ota.cpp) */
+export interface OtaStatus {
+  product: string
+  firmware: string
+  ui: string
+  uiMissing: boolean
+  slot: string
+  nextSlot: string
+  firmwareSlotBytes: number
+  uiPartitionBytes: number
+  /** Why updates aren't allowed right now */
+  busy?: string
+  /** The last update's outcome, until dismissed */
+  result?: {
+    kind: 'updated' | 'rolled-back' | 'ui-installed' | 'ui-failed'
+    from: string
+    to: string
+    reason: string
+  }
+}

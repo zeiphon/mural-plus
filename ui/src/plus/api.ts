@@ -1,4 +1,4 @@
-import type { Diagnostics, PlusState, ServoAction } from './types'
+import type { Diagnostics, OtaStatus, PlusState, ServoAction } from './types'
 
 // Plus-only routes. Routes shared with upstream (motor jog, servo, upload, ...)
 // are used through upstream's ../api.ts.
@@ -129,4 +129,26 @@ export async function reloadWhenBack(): Promise<void> {
 
 export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+export const getOtaStatus = (): Promise<OtaStatus> => request('GET', '/ota/status')
+export const dismissOtaResult = (): Promise<string> => request('POST', '/ota/dismiss')
+
+/** Uploads one part of an update as a multipart file, reporting progress (0–100). */
+export function uploadOtaPart(url: string, blob: Blob, onProgress: (pct: number) => void): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const form = new FormData()
+    form.append('file', blob, 'image.bin')
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve(xhr.responseText)
+        : reject(new Error(xhr.responseText || `Upload failed: ${xhr.status}`))
+    xhr.onerror = () => reject(new Error('Network error during the upload'))
+    xhr.open('POST', url)
+    xhr.send(form)
+  })
 }

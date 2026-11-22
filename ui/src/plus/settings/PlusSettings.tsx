@@ -13,6 +13,7 @@ import {
   type PenSettingsUpdate,
 } from '../api'
 import type { PlusState } from '../types'
+import { FirmwareSettings } from './FirmwareSettings'
 
 const SPEED_STEP = 50 // steps/s, same step as the speed slider
 
@@ -127,6 +128,10 @@ export function PlusSettings() {
             </p>
           </div>
         )}
+      </Section>
+
+      <Section title="Firmware">
+        <FirmwareSettings drawing={drawing} />
       </Section>
     </div>
   )

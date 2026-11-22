@@ -20,7 +20,7 @@ export function PlusSettingsButton() {
   return (
     <>
       <Button variant="secondary" onClick={() => setOpen(true)}>
-        Pen and drawing settings
+        Pen, drawing and firmware settings
       </Button>
       <PlusSettingsModal isOpen={open} onClose={() => setOpen(false)} />
     </>
