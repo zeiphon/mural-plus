@@ -30,6 +30,18 @@ namespace {
 
     Preferences prefs;
 
+    // Preferences and SD log an error for a missing key or file, which is
+    // normal here (no update yet, nothing staged).
+    String getText(const char *key, const char *fallback) {
+        return prefs.isKey(key) ? prefs.getString(key, fallback) : String(fallback);
+    }
+
+    void removeFile(const char *path) {
+        if (SD.exists(path)) {
+            SD.remove(path);
+        }
+    }
+
     String toHex(const uint8_t *bytes, size_t len) {
         static const char digits[] = "0123456789abcdef";
         String out;
@@ -114,7 +126,7 @@ void Ota::beginBoot() {
     bool onProbation = esp_ota_get_state_partition(running, &imgState) == ESP_OK
         && imgState == ESP_OTA_IMG_PENDING_VERIFY;
     State state = (State)prefs.getUChar("state", IDLE);
-    bool fromHere = prefs.getString("fromSlot", "") == running->label;
+    bool fromHere = getText("fromSlot", "") == running->label;
 
     if (state == PENDING || state == INSTALLING_UI || state == UI_INSTALLED) {
         if (onProbation && !fromHere) {
@@ -135,7 +147,7 @@ void Ota::beginBoot() {
         esp_ota_mark_app_valid_cancel_rollback();
     }
     if (prefs.getUChar("state", IDLE) == IDLE) {
-        SD.remove(UI_NEW_PATH); // an abandoned upload. The backup stays until the next update starts.
+        removeFile(UI_NEW_PATH); // an abandoned upload. The backup stays until the next update starts.
     }
     readUiVersion();
     Log.printf("Firmware slot %s, web UI %s\n", running->label,
@@ -143,7 +155,7 @@ void Ota::beginBoot() {
 }
 
 void Ota::newFirmwareBoot(State state) {
-    Log.printf("OTA: first boot of %s, updated from %s\n", MURAL_FW_VERSION, prefs.getString("from", "?").c_str());
+    Log.printf("OTA: first boot of %s, updated from %s\n", MURAL_FW_VERSION, getText("from", "?").c_str());
     if (state == PENDING) {
         String error;
         if (!backupUi(error)) {
@@ -156,7 +168,7 @@ void Ota::newFirmwareBoot(State state) {
         Log.println("OTA: installing the new web UI");
         LittleFS.end();
         String error;
-        if (!writeUiPartition(UI_NEW_PATH, prefs.getString("uiSha", ""), error)) {
+        if (!writeUiPartition(UI_NEW_PATH, getText("uiSha", ""), error)) {
             failAndRollBack("Couldn't install the new web UI: " + error, true);
         }
         if (!LittleFS.begin(false)) {
@@ -187,11 +199,11 @@ void Ota::confirm() {
 void Ota::oldFirmwareAfterRollback(State state) {
     String reason = "The new firmware restarted before it had finished starting up. "
                     "This can be a power cut, a crash, or no WiFi connection";
-    Log.printf("OTA: back on %s, the update to %s didn't complete\n", MURAL_FW_VERSION, prefs.getString("to", "?").c_str());
+    Log.printf("OTA: back on %s, the update to %s didn't complete\n", MURAL_FW_VERSION, getText("to", "?").c_str());
     if (state == INSTALLING_UI || state == UI_INSTALLED) {
         LittleFS.end();
         String error;
-        if (writeUiPartition(UI_BACKUP_PATH, prefs.getString("bakSha", ""), error)) {
+        if (writeUiPartition(UI_BACKUP_PATH, getText("bakSha", ""), error)) {
             Log.println("OTA: restored the previous web UI");
         } else {
             Log.printf("OTA: couldn't restore the previous web UI: %s\n", error.c_str());
@@ -203,12 +215,12 @@ void Ota::oldFirmwareAfterRollback(State state) {
 }
 
 void Ota::failAndRollBack(const String &reason, bool uiTouched) {
-    Log.printf("OTA: %s. Going back to %s\n", reason.c_str(), prefs.getString("from", "the previous firmware").c_str());
+    Log.printf("OTA: %s. Going back to %s\n", reason.c_str(), getText("from", "the previous firmware").c_str());
     String fullReason = reason;
     if (uiTouched) {
         LittleFS.end();
         String error;
-        if (!writeUiPartition(UI_BACKUP_PATH, prefs.getString("bakSha", ""), error)) {
+        if (!writeUiPartition(UI_BACKUP_PATH, getText("bakSha", ""), error)) {
             Log.printf("OTA: couldn't restore the previous web UI: %s\n", error.c_str());
             fullReason += ". Restoring the previous web UI also failed (" + error + "), so upload it from the recovery page";
         }
@@ -223,7 +235,7 @@ void Ota::installUiOnly() {
     Log.println("OTA: installing the uploaded web UI");
     LittleFS.end();
     String error;
-    bool ok = writeUiPartition(UI_NEW_PATH, prefs.getString("uiSha", ""), error);
+    bool ok = writeUiPartition(UI_NEW_PATH, getText("uiSha", ""), error);
     LittleFS.begin(true);
     readUiVersion();
     prefs.putString("to", uiVersion);
@@ -240,7 +252,7 @@ void Ota::finish(Result result, const String &reason) {
     prefs.putUChar("state", IDLE);
     prefs.putUChar("result", result);
     prefs.putString("reason", reason);
-    SD.remove(UI_NEW_PATH);
+    removeFile(UI_NEW_PATH);
 }
 
 // Copies the UI partition to the SD card, once per update.
@@ -250,7 +262,7 @@ bool Ota::backupUi(String &error) {
         error = "no web UI partition";
         return false;
     }
-    if (prefs.getString("bakSha", "").length() && SD.exists(UI_BACKUP_PATH)) {
+    if (getText("bakSha", "").length() && SD.exists(UI_BACKUP_PATH)) {
         return true; // already backed up for this update
     }
     SD.mkdir(OTA_DIR);
@@ -382,9 +394,9 @@ void Ota::handleStatus(AsyncWebServerRequest *request) {
     if (result) {
         JsonObject &r = root.createNestedObject("result");
         r["kind"] = result;
-        r["from"] = prefs.getString("from", "");
-        r["to"] = prefs.getString("to", "");
-        r["reason"] = prefs.getString("reason", "");
+        r["from"] = getText("from", "");
+        r["to"] = getText("to", "");
+        r["reason"] = getText("reason", "");
     }
     root.printTo(*response);
     request->send(response);
@@ -462,8 +474,8 @@ void Ota::handleUiUpload(AsyncWebServerRequest *request, size_t index, uint8_t *
         }
         stagedUiSha = "";
         prefs.remove("bakSha");
-        SD.remove(UI_NEW_PATH);
-        SD.remove(UI_BACKUP_PATH);
+        removeFile(UI_NEW_PATH);
+        removeFile(UI_BACKUP_PATH);
         SD.mkdir(OTA_DIR);
         uint64_t freeBytes = SD.totalBytes() - SD.usedBytes();
         uint64_t needed = 2 * (uint64_t)partSize + 64 * 1024; // new image and backup
@@ -486,12 +498,12 @@ void Ota::handleUiUpload(AsyncWebServerRequest *request, size_t index, uint8_t *
         uiUpload.received += len;
         if (uiUpload.received > uiUpload.expected) {
             failUpload(uiUpload, 400, "More data than the given size");
-            SD.remove(UI_NEW_PATH);
+            removeFile(UI_NEW_PATH);
             return;
         }
         if (uiUpload.file.write(data, len) != len) {
             failUpload(uiUpload, 500, "Writing to the SD card failed");
-            SD.remove(UI_NEW_PATH);
+            removeFile(UI_NEW_PATH);
             return;
         }
         mbedtls_sha256_update_ret(&uiUpload.sha, data, len);
@@ -508,7 +520,7 @@ void Ota::handleUiUpload(AsyncWebServerRequest *request, size_t index, uint8_t *
             Log.println("OTA: web UI received");
             return;
         }
-        SD.remove(UI_NEW_PATH);
+        removeFile(UI_NEW_PATH);
     }
 }
 
