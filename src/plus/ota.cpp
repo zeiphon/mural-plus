@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include <Update.h>
 #include <esp_ota_ops.h>
+#include <errno.h>
 #include "ArduinoJson.h"
 #include "logger.h"
 #include "restart.h"
@@ -501,8 +502,20 @@ void Ota::handleUiUpload(AsyncWebServerRequest *request, size_t index, uint8_t *
             removeFile(UI_NEW_PATH);
             return;
         }
-        if (uiUpload.file.write(data, len) != len) {
-            failUpload(uiUpload, 500, "Writing to the SD card failed");
+        bool open = (bool)uiUpload.file;
+        errno = 0;
+        size_t written = uiUpload.file.write(data, len);
+        if (written < len && open) {
+            // A short write: try the rest once more before giving up.
+            int firstErrno = errno;
+            vTaskDelay(1);
+            written += uiUpload.file.write(data + written, len - written);
+            Log.printf("OTA: short SD write (errno %d), retry %s\n", firstErrno, written == len ? "worked" : "failed");
+        }
+        if (written != len) {
+            failUpload(uiUpload, 500, "Writing to the SD card failed: wrote " + String((unsigned)written) + " of "
+                + String((unsigned)len) + " bytes at " + String((unsigned)(uiUpload.received - len))
+                + ", errno " + String(errno) + (open ? "" : ", file not open"));
             removeFile(UI_NEW_PATH);
             return;
         }
