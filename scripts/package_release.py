@@ -141,9 +141,12 @@ def write_update_file(path, product, version, ui, firmware):
         f.write(UPDATE_MAGIC + struct.pack("<I", len(header)) + header + ui + firmware)
 
 
-def build_metadata():
-    out = ROOT / ".pio" / "build" / ENV / "release-metadata.json"
-    run(pio_cmd() + ["project", "metadata", "-e", ENV, "--json-output", "--json-output-path", str(out)])
+def build_metadata(metadata_path=None):
+    """Build folder, boot images and app offset, from `pio project metadata`, or from a
+    file in the same format (scripts/package_target.py writes one from inside PlatformIO)."""
+    out = Path(metadata_path) if metadata_path else ROOT / ".pio" / "build" / ENV / "release-metadata.json"
+    if not metadata_path:
+        run(pio_cmd() + ["project", "metadata", "-e", ENV, "--json-output", "--json-output-path", str(out)])
     data = json.loads(out.read_text())[ENV]
     build_dir = Path(data["prog_path"]).parent
     images = [(int(i["offset"], 16), Path(i["path"])) for i in data["extra"]["flash_images"]]
@@ -155,6 +158,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default="dist", help="output folder (default: dist)")
     ap.add_argument("--skip-build", action="store_true", help="package the existing build output")
+    ap.add_argument("--metadata", help=argparse.SUPPRESS)  # used by scripts/package_target.py
     args = ap.parse_args()
 
     version = get_version(ROOT)
@@ -166,7 +170,7 @@ def main():
         run(pio_cmd() + ["run", "-e", ENV])
         run(pio_cmd() + ["run", "-e", ENV, "-t", "buildfs"])
 
-    build_dir, boot_images, app_offset = build_metadata()
+    build_dir, boot_images, app_offset = build_metadata(args.metadata)
     firmware = build_dir / "firmware.bin"
     littlefs = build_dir / "littlefs.bin"
     fs_off, fs_size = fs_partition()
