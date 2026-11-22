@@ -18,6 +18,7 @@ import { Help } from '../components/Help'
 import { NumberField, SmallButton } from '../components/Controls'
 import { FirmwareSummary } from './FirmwareSettings'
 import { BeltSettings } from './BeltSettings'
+import type { UiChoice } from '../storage'
 
 const SPEED_STEP = 50 // steps/s, same step as the speed slider
 
@@ -25,7 +26,11 @@ const SPEED_STEP = 50 // steps/s, same step as the speed slider
  * Plus mode's settings: pen, belts, drawing and firmware. The pen angles and
  * drawing speed can be changed while drawing; the rest is hidden or off then.
  */
-export function PlusSettings({ onOpenUpdate }: { onOpenUpdate: () => void }) {
+export function PlusSettings(props: {
+  ui: UiChoice
+  onUiChange: (choice: UiChoice) => void
+  onOpenUpdate: () => void
+}) {
   const [state, setState] = useState<PlusState | null>(null)
 
   function reload() {
@@ -163,7 +168,30 @@ export function PlusSettings({ onOpenUpdate }: { onOpenUpdate: () => void }) {
       </Section>
 
       <Section title="Firmware">
-        <FirmwareSummary onOpenUpdate={onOpenUpdate} />
+        <FirmwareSummary onOpenUpdate={props.onOpenUpdate} />
+      </Section>
+
+      <Section title="Layout">
+        <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-gray-700" role="group">
+          {(['basic', 'advanced'] as const).map((choice) => (
+            <button
+              key={choice}
+              onClick={() => props.onUiChange(choice)}
+              aria-pressed={props.ui === choice}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${choice === 'basic' ? 'border-r border-gray-700' : ''} ${
+                props.ui === choice ? 'bg-cyan-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              {choice === 'basic' ? 'Basic' : 'Advanced'}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-gray-500">
+          {props.ui === 'basic'
+            ? 'Basic goes through the setup one step at a time.'
+            : 'Advanced shows every setup step on one page, to do in any order.'}{' '}
+          This browser remembers the choice.
+        </p>
       </Section>
     </div>
   )

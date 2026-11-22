@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Button } from '../../components/Button'
 import { useBackButton } from '../backButton'
+import type { UiChoice } from '../storage'
 import { PlusSettings } from './PlusSettings'
 import { FirmwareUpdate } from './FirmwareSettings'
 
@@ -8,17 +9,19 @@ interface Props {
   isOpen: boolean
   /** A drawing is running (updates aren't allowed then) */
   drawing: boolean
+  ui: UiChoice
+  onUiChange: (choice: UiChoice) => void
   onClose: () => void
 }
 
 /** Plus mode's settings (the ⚙), in a scrollable modal. Plus doesn't use upstream's Tools modal. */
-export function PlusSettingsModal({ isOpen, drawing, onClose }: Props) {
+export function PlusSettingsModal({ isOpen, ...props }: Props) {
   if (!isOpen) return null
   // Mounted afresh each time, so it opens on the main page
-  return <SettingsDialog drawing={drawing} onClose={onClose} />
+  return <SettingsDialog {...props} />
 }
 
-function SettingsDialog({ drawing, onClose }: { drawing: boolean; onClose: () => void }) {
+function SettingsDialog({ drawing, ui, onUiChange, onClose }: Omit<Props, 'isOpen'>) {
   const [page, setPage] = useState<'main' | 'update'>('main')
   const [installing, setInstalling] = useState(false)
   const handleInstallingChange = useCallback((on: boolean) => setInstalling(on), [])
@@ -79,7 +82,7 @@ function SettingsDialog({ drawing, onClose }: { drawing: boolean; onClose: () =>
             </>
           ) : (
             <>
-              <PlusSettings onOpenUpdate={() => setPage('update')} />
+              <PlusSettings ui={ui} onUiChange={onUiChange} onOpenUpdate={() => setPage('update')} />
               <Button onClick={onClose} variant="primary">
                 Close
               </Button>

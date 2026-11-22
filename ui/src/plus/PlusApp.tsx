@@ -24,6 +24,18 @@ import { PenScreen } from './screens/PenScreen'
 import { DiagnosticsScreen } from './screens/DiagnosticsScreen'
 import { PlusSettingsModal } from './settings/PlusSettingsModal'
 import { useBackButton } from './backButton'
+import { loadUiChoice, saveUiChoice, type UiChoice } from './storage'
+import {
+  StepBar,
+  WizardNav,
+  firstUnfinishedStep,
+  nextStep,
+  previousStep,
+  stepDone,
+  type WizardStep,
+} from './wizard/steps'
+import { CurrentDrawingScreen } from './wizard/CurrentDrawingScreen'
+import { StartScreen } from './wizard/StartScreen'
 
 type View =
   | 'loading'
@@ -41,10 +53,52 @@ type View =
   | 'ChooseRenderer'
   | 'DrawingPreview'
   | 'UploadProgress'
+  // Basic UI only
+  | 'currentDrawing'
+  | 'start'
+
+/** The wizard step a view belongs to (in the basic UI), or null outside the wizard. */
+function wizardStepOf(view: View): WizardStep | null {
+  switch (view) {
+    case 'distance':
+    case 'belts':
+    case 'pen':
+    case 'start':
+      return view
+    case 'currentDrawing':
+    case 'InputSelect':
+    case 'SvgSelect':
+    case 'RasterSelect':
+    case 'ChooseRenderer':
+    case 'DrawingPreview':
+    case 'UploadProgress':
+      return 'drawing'
+    default:
+      return null
+  }
+}
+
+/** The screen a wizard step opens on. */
+function stepView(step: WizardStep, state: PlusState): View {
+  if (step === 'drawing') return state.drawingFile?.compatible ? 'currentDrawing' : 'InputSelect'
+  return step
+}
+
+/** The views that show the wizard's Back and Next; the other drawing screens have their own Back. */
+const WIZARD_NAV_VIEWS: View[] = ['distance', 'belts', 'pen', 'currentDrawing', 'InputSelect', 'start']
+
+const NEXT_HINTS: Partial<Record<WizardStep, string>> = {
+  distance: 'Set the hanger distance to continue.',
+  belts: 'Extend the belts to home to continue.',
+  pen: 'Calibrate the pen to continue.',
+  drawing: 'Choose a drawing to continue.',
+}
 
 export function PlusApp() {
   const [state, setState] = useState<PlusState | null>(null)
   const [view, setView] = useState<View>('loading')
+  const [ui, setUi] = useState<UiChoice>(loadUiChoice)
+  const basic = ui === 'basic'
   const [plusSettingsOpen, setPlusSettingsOpen] = useState(false)
   // Where the Diagnostics page goes back to
   const [returnView, setReturnView] = useState<View>('overview')
@@ -60,7 +114,7 @@ export function PlusApp() {
     getPlusState()
       .then((s) => {
         setState(s)
-        setView(s.drawingActive ? 'drawing' : 'overview')
+        setView(s.drawingActive ? 'drawing' : homeView(s, ui))
       })
       .catch(() => showErrorAlert('Failed to retrieve state'))
   }, [])
@@ -73,31 +127,98 @@ export function PlusApp() {
     }
   }
 
-  function showOverview(s?: BackendState) {
+  /** Where "home" is: the Overview in advanced, the first unfinished step in basic. */
+  function homeView(s: PlusState, choice: UiChoice = ui): View {
+    return choice === 'basic' ? stepView(firstUnfinishedStep(s), s) : 'overview'
+  }
+
+  function go(next: View) {
+    // Don't leave the pen touching the wall
+    if (view === 'pen' && next !== 'pen') penUp().catch(() => {})
+    setView(next)
+  }
+
+  /** A setup step's screen finished its job: back to the Overview, or on to the wizard's next step. */
+  function handleStepDone(s?: BackendState) {
+    const latest = (s as PlusState | undefined) ?? state
     if (s) setState(s as PlusState)
-    setView('overview')
+    const step = basic ? wizardStepOf(view) : null
+    const after = step && nextStep(step)
+    go(after && latest ? stepView(after, latest) : 'overview')
     refresh()
   }
 
   function handleOpenDiagnostics() {
     if (view === 'pen') penUp().catch(() => {})
-    setReturnView(view === 'drawing' ? 'drawing' : 'overview')
+    setReturnView(view)
     setView('diagnostics')
   }
 
   function handleBackToOverview() {
     if (view === 'diagnostics') {
-      // Back to the drawing if there was one; it moves on to the overview by itself if it has finished.
+      // Back to where it was opened from. A drawing moves on by itself if it has finished.
       setView(returnView)
       refresh()
       return
     }
-    if (view === 'pen') {
-      // Don't leave the pen touching the wall
-      penUp().catch(() => {})
-    }
-    showOverview()
+    go('overview')
+    refresh()
   }
+
+  function handleUiChange(choice: UiChoice) {
+    if (choice === ui) return
+    setUi(choice)
+    saveUiChoice(choice)
+    if (!state) return
+    // Stay on the same screen, unless it only exists in the other UI.
+    const fix = (v: View): View =>
+      choice === 'basic'
+        ? v === 'overview'
+          ? homeView(state, choice)
+          : v
+        : v === 'start' || v === 'currentDrawing'
+          ? 'overview'
+          : v
+    setView(fix(view))
+    setReturnView(fix(returnView))
+  }
+
+  // The wizard (basic UI)
+  const wizardStep = basic ? wizardStepOf(view) : null
+  const showWizardNav = wizardStep !== null && WIZARD_NAV_VIEWS.includes(view)
+
+  function wizardBack() {
+    if (!state || !wizardStep) return
+    if (view === 'InputSelect' && state.drawingFile.compatible) {
+      go('currentDrawing')
+      return
+    }
+    const previous = previousStep(wizardStep)
+    if (previous) go(stepView(previous, state))
+  }
+
+  async function wizardNext() {
+    if (!state || !wizardStep) return
+    const after = nextStep(wizardStep)
+    if (!after) return
+    // The step may have been undone since the last refresh, for example by retracting a belt.
+    let latest = state
+    try {
+      latest = await getPlusState()
+      setState(latest)
+    } catch {
+      // go by what's known
+    }
+    if (stepDone(wizardStep, latest)) go(stepView(after, latest))
+  }
+
+  // Keep the step bar and Next up to date while on a step. Not on the drawing
+  // pipeline's own screens, which do their own work.
+  useEffect(() => {
+    if (!showWizardNav) return
+    const id = setInterval(refresh, 3000)
+    return () => clearInterval(id)
+  }, [showWizardNav])
 
   function handleOpenStep(step: SetupStep) {
     setView(step === 'drawing' ? 'InputSelect' : step)
@@ -158,7 +279,7 @@ export function PlusApp() {
 
   async function handleDrawingFinished(s: PlusState, message?: string) {
     setState(s)
-    setView('overview')
+    setView(basic ? 'start' : 'overview')
     if (message) await showAlert(message)
   }
 
@@ -166,6 +287,7 @@ export function PlusApp() {
   // During an upload it does nothing, rather than leave the page and abandon
   // the upload. Elsewhere (the overview, a drawing, a restart) it leaves the page as usual.
   function backAction(): (() => void) | null {
+    if (showWizardNav) return view === 'distance' ? null : wizardBack
     switch (view) {
       case 'distance':
       case 'belts':
@@ -212,19 +334,35 @@ export function PlusApp() {
       )
       break
     case 'distance':
-      screen = <DistanceScreen state={state} onDone={showOverview} />
+      screen = <DistanceScreen state={state} onDone={handleStepDone} />
       break
     case 'belts':
-      screen = <BeltsScreen state={state} onDone={showOverview} />
+      screen = <BeltsScreen state={state} onDone={handleStepDone} />
       break
     case 'pen':
-      screen = <PenScreen state={state} onDone={showOverview} />
+      screen = <PenScreen state={state} onDone={handleStepDone} />
       break
     case 'drawing':
       screen = <DrawingScreen initialState={state} onFinished={handleDrawingFinished} />
       break
     case 'diagnostics':
-      screen = <DiagnosticsScreen />
+      screen = <DiagnosticsScreen onSwitchToClassic={handleSwitchToClassic} />
+      break
+    case 'currentDrawing':
+      screen = <CurrentDrawingScreen state={state} onUse={() => go('start')} onChooseNew={() => go('InputSelect')} />
+      break
+    case 'start':
+      screen = (
+        <StartScreen
+          state={state}
+          onStarted={(s) => {
+            setState(s)
+            setView('drawing')
+          }}
+          onStateChange={setState}
+          onOpenStep={(step) => go(stepView(step, state))}
+        />
+      )
       break
     case 'restarting':
       screen = (
@@ -296,7 +434,7 @@ export function PlusApp() {
       break
     case 'UploadProgress':
       screen = (
-        <UploadProgressScreen commands={renderedCommands!} onDone={showOverview} onError={handleUploadError} />
+        <UploadProgressScreen commands={renderedCommands!} onDone={handleStepDone} onError={handleUploadError} />
       )
       break
   }
@@ -319,11 +457,14 @@ export function PlusApp() {
           </button>
         </>
       )}
-      {settled && (
+      {settled && view !== 'diagnostics' && (
         <>
           {' · '}
-          <button onClick={handleSwitchToClassic} className="hover:text-gray-400 transition-colors">
-            Switch to classic
+          <button
+            onClick={() => handleUiChange(basic ? 'advanced' : 'basic')}
+            className="hover:text-gray-400 transition-colors"
+          >
+            {basic ? 'Advanced view' : 'Basic view'}
           </button>
         </>
       )}
@@ -332,12 +473,12 @@ export function PlusApp() {
 
   return (
     <Page footer={footer}>
-      {((settled && view !== 'overview') || view === 'diagnostics') && (
+      {(view === 'diagnostics' || (!basic && settled && view !== 'overview')) && (
         <button
           onClick={handleBackToOverview}
           className="fixed top-4 left-4 text-sm text-gray-400 hover:text-gray-200 transition-colors z-10"
         >
-          {view === 'diagnostics' && returnView === 'drawing' ? '← Drawing' : '← Overview'}
+          {view === 'diagnostics' ? '← Back' : '← Overview'}
         </button>
       )}
       {(settled || duringDrawing) && (
@@ -349,10 +490,32 @@ export function PlusApp() {
           ⚙
         </button>
       )}
-      {screen}
+      {wizardStep ? (
+        <div className="space-y-4 sm:space-y-6">
+          <StepBar
+            state={state}
+            current={wizardStep}
+            locked={view === 'UploadProgress'}
+            onSelect={(step) => go(stepView(step, state))}
+          />
+          {screen}
+          {showWizardNav && (
+            <WizardNav
+              onBack={view === 'distance' ? undefined : wizardBack}
+              onNext={view === 'currentDrawing' || view === 'start' ? undefined : wizardNext}
+              nextEnabled={stepDone(wizardStep, state)}
+              nextHint={NEXT_HINTS[wizardStep]}
+            />
+          )}
+        </div>
+      ) : (
+        screen
+      )}
       <PlusSettingsModal
         isOpen={plusSettingsOpen}
         drawing={duringDrawing}
+        ui={ui}
+        onUiChange={handleUiChange}
         onClose={() => {
           setPlusSettingsOpen(false)
           refresh() // moving the belts or changing the pulley diameter forgets the belt position

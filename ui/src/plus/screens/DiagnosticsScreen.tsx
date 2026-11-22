@@ -11,7 +11,7 @@ const POLL_MS = 2000
 const LOG_POLL_MS = 3000
 
 /** Readouts, servo and motor tests and the log, for troubleshooting. Works while drawing (tests are disabled then). */
-export function DiagnosticsScreen() {
+export function DiagnosticsScreen({ onSwitchToClassic }: { onSwitchToClassic: () => void }) {
   const [diag, setDiag] = useState<Diagnostics | null>(null)
   const [lost, setLost] = useState(false)
   const [log, setLog] = useState<string | null>(null)
@@ -102,6 +102,15 @@ export function DiagnosticsScreen() {
         </>
       )}
       <LogSection log={log} autoLog={autoLog} onAutoLog={setAutoLog} onRefresh={() => getLog().then(setLog).catch(() => {})} />
+      <Section title="Classic Mural">
+        <p className="text-sm text-gray-400">
+          Upstream Mural's original interface, as a fallback or for comparing. Mural restarts, and you'll need to set it
+          up again.
+        </p>
+        <SmallButton onClick={onSwitchToClassic} disabled={!diag || diag.system.drawing}>
+          Switch to classic
+        </SmallButton>
+      </Section>
     </div>
   )
 }
