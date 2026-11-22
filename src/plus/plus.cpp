@@ -11,6 +11,10 @@
 #include "diagnostics.h"
 #include "movement_access.h"
 
+// main.cpp's "use without WiFi" flag. It's cleared at boot, so a restart goes
+// back to the WiFi flow unless it's set again with main.cpp's magic value.
+extern uint32_t hotspotBootFlag;
+
 namespace plus {
 
 namespace {
@@ -18,6 +22,7 @@ namespace {
     // upstream's keys in "mural".
     constexpr const char *PREFS_NAMESPACE = "muralplus";
     constexpr const char *CLASSIC_KEY = "classic";
+    constexpr uint32_t HOTSPOT_BOOT_MAGIC = 0x4D555241; // same as main.cpp
 
     bool plusActive = false;
     Movement *gMovement = nullptr;
@@ -60,11 +65,11 @@ namespace {
     // GET  /plus/mode  -> {"mode":"plus"|"classic"}
     // POST /plus/mode  mode=plus|classic, then restarts
     // Registered in both modes, so the UI can tell which one is running and switch.
-    void registerModeRoutes(AsyncWebServer *server, bool classic) {
+    void registerModeRoutes(AsyncWebServer *server, bool classic, bool hotspotMode) {
         server->on("/plus/mode", HTTP_GET, [classic](AsyncWebServerRequest *request) {
             request->send(200, "application/json", classic ? "{\"mode\":\"classic\"}" : "{\"mode\":\"plus\"}");
         });
-        server->on("/plus/mode", HTTP_POST, [](AsyncWebServerRequest *request) {
+        server->on("/plus/mode", HTTP_POST, [hotspotMode](AsyncWebServerRequest *request) {
             String mode = request->arg("mode");
             if (mode != "plus" && mode != "classic") {
                 request->send(400, "text/plain", "mode must be plus or classic");
@@ -79,6 +84,9 @@ namespace {
                 persist.clearDrawing();
             }
             saveClassicMode(mode == "classic");
+            if (hotspotMode) {
+                hotspotBootFlag = HOTSPOT_BOOT_MAGIC; // come back on the hotspot, not the WiFi flow
+            }
             Log.printf("Switching to %s mode, restarting\n", mode.c_str());
             request->send(200, "text/plain", "Restarting");
             restartSoon();
@@ -88,7 +96,7 @@ namespace {
 
 bool begin(AsyncWebServer *server, Movement *movement, Display *display, bool hotspotMode, const String &ipAddress) {
     bool classic = loadClassicMode();
-    registerModeRoutes(server, classic);
+    registerModeRoutes(server, classic, hotspotMode);
     if (classic) {
         Log.println("Classic mode (upstream phases)");
         return false;

@@ -23,10 +23,10 @@ struct StepperStatus {
     float speed = 0;        // steps/s
 };
 
-// Reads Movement's private drivers and steppers (friend in movement.h, a
-// fork-only edit). Reading over UART takes a few ms per register; nothing else
-// uses the UART after boot, and the step pins aren't touched, so it's safe
-// while drawing.
+// Reads Movement's private drivers and steppers without editing movement.h
+// (see movement_access.cpp). Reading over UART takes a few ms per register;
+// nothing else uses the UART after boot, and the step pins aren't touched, so
+// it's safe while drawing.
 class MovementAccess {
     public:
     static DriverStatus readDriver(Movement *movement, bool left);

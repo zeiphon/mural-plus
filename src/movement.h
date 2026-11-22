@@ -52,11 +52,7 @@ constexpr int RIGHT_DIAG_PIN = 39;
 
 constexpr int MOTOR_ENABLE_PIN = 13;
 
-// Mural Plus reads the motor drivers and step counts (src/plus/movement_access.h)
-namespace plus { class MovementAccess; }
-
 class Movement{
-    friend class plus::MovementAccess;
 private:
     int topDistance;            // Distance between pins (d_pins) [mm].
     double diameter;             // Effective diameter of the pulley+belts [mm]. Settable from the UI, persisted in NVS.

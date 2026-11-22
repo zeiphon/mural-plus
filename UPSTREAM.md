@@ -24,7 +24,13 @@ Small edits that stay in this fork, so they can conflict when upstream changes t
 - `src/main.cpp`: the `plus::begin` and `plus::loop` hooks.
 - `ui/src/main.tsx`: renders `Root`. `ui/src/components/ToolsModal.tsx`: the plus settings button and the Park Servo label.
 - `platformio.ini`, `partitions.csv`: build flags, scripts and the OTA-ready layout.
-- `src/movement.h`: `friend class plus::MovementAccess`, for the motor driver status and step counts on the Diagnostics page. If upstream renames `leftDriver`/`rightDriver`/`leftMotor`/`rightMotor`, `src/plus/movement_access.cpp` stops compiling.
+
+## Upstream internals plus relies on
+
+Plus reads or sets these without editing the upstream files, so a change upstream shows up as a build error, except where noted.
+
+- `src/movement.h`: the private members `leftDriver`, `rightDriver`, `leftMotor` and `rightMotor`, for the motor driver status and step counts on the Diagnostics page (`src/plus/movement_access.cpp`).
+- `src/main.cpp`: `hotspotBootFlag` and its magic value, so switching modes on the hotspot comes back on the hotspot (`src/plus/plus.cpp`). If upstream changes the value, the build still passes but the switch lands in the WiFi flow.
 
 ## Port backlog
 
