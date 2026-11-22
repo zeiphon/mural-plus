@@ -263,7 +263,7 @@ def main():
 
     notes = f"""## Updating from the browser
 
-If Mural already runs a version of {PRODUCT_NAME} that can update itself, download `{names['update']}`. In Mural, open the settings (the gear), choose **Pen, drawing and firmware settings**, and install the file under **Firmware**. Settings and the drawing are kept. If the new version doesn't start properly, Mural goes back to the old one.
+If Mural already runs a version of {PRODUCT_NAME} that can update itself, download `{names['update']}`. In Mural, open the settings (the gear, top right), then under **Firmware** choose **Install an update**. Settings and the drawing are kept. If the new version doesn't start properly, Mural goes back to the old one.
 
 ## Installing over USB
 
