@@ -25,10 +25,14 @@ fetch('/ota/status').then(function(r){return r.json()}).then(function(s){st=s;
  if(s.result&&s.result.reason)say('Last update: '+s.result.kind+'. '+s.result.reason);
 }).catch(function(){$('info').textContent='Mural isn\'t responding.'});
 function send(url,blob,label){return new Promise(function(ok,fail){
- var x=new XMLHttpRequest(),d=new FormData();d.append('file',blob,'image.bin');
- x.upload.onprogress=function(e){if(e.lengthComputable)say(label+': '+Math.round(e.loaded*100/e.total)+'%')};
- x.onload=function(){x.status<300?ok(x.responseText):fail(new Error(x.responseText||('HTTP '+x.status)))};
- x.onerror=function(){fail(new Error('Network error'))};x.open('POST',url);x.send(d)})}
+ var x=new XMLHttpRequest(),d=new FormData(),err=function(m,s){var e=new Error(m);e.status=s;fail(e)};d.append('file',blob,'image.bin');
+ if(label)x.upload.onprogress=function(e){if(e.lengthComputable)say(label+': '+Math.round(e.loaded*100/e.total)+'%')};
+ x.onload=function(){x.status<300?ok(x.responseText):err(x.responseText||('HTTP '+x.status),x.status)};
+ x.onerror=function(){err('Network error',0)};x.open('POST',url);x.send(d)})}
+function sendUi(blob,size,sha){var off=0,tries=0,P=32768;return new Promise(function(ok,fail){(function next(){
+ if(off>=size)return ok();var end=Math.min(off+P,size);say('Web UI: '+Math.round(off*100/size)+'%');
+ send('/ota/ui?offset='+off+'&total='+size+(sha?'&sha256='+sha:''),blob.slice(off,end),null).then(function(){off=end;tries=0;next()},
+  function(e){if((e.status===0||e.status>=500)&&++tries<=3)return setTimeout(next,500*tries);fail(e)})})()})}
 function waitForRestart(){say('Restarting and installing. This can take a minute…');
  setTimeout(function poll(){fetch('/ota/status').then(function(){location.href='/'}).catch(function(){setTimeout(poll,3000)})},8000)}
 function text(buf){return new TextDecoder().decode(buf)}
@@ -40,10 +44,10 @@ $('go').onclick=function(){var f=$('file').files[0];if(!f||!st)return;$('go').di
     var hd=JSON.parse(text(h)),base=12+n,part=function(name){return hd.parts.filter(function(p){return p.name===name})[0]};
     if(hd.product!==st.product)throw new Error('This update is for '+hd.product+', not '+st.product+'.');
     var ui=part('ui'),fw=part('firmware'),piece=function(p){return f.slice(base+p.offset,base+p.offset+p.size)};
-    return send('/ota/ui?size='+ui.size+'&sha256='+ui.sha256,piece(ui),'Web UI').then(function(){
+    return sendUi(piece(ui),ui.size,ui.sha256).then(function(){
      return send('/ota/firmware?size='+fw.size+'&sha256='+fw.sha256+'&uiSha256='+ui.sha256+'&version='+encodeURIComponent(hd.version),piece(fw),'Firmware')})})}
   if(f.size!==st.uiPartitionBytes)throw new Error('That isn\'t an update file or a web UI image for this board.');
-  return send('/ota/ui?size='+f.size,f,'Web UI').then(function(){return fetch('/ota/installUi',{method:'POST'})})
+  return sendUi(f,f.size,'').then(function(){return fetch('/ota/installUi',{method:'POST'})})
    .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t)})})
  }).then(waitForRestart).catch(function(e){say('Failed: '+e.message);$('go').disabled=false})};
 </script></body></html>

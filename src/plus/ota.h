@@ -20,7 +20,10 @@ namespace plus {
 //
 // Routes:
 //   GET  /ota/status      versions, slots, the last update's result
-//   POST /ota/ui          ?size=&sha256= (optional), multipart file: stage a UI image on the SD card
+//   POST /ota/ui          ?offset=&total=&sha256= (optional), multipart file: one piece of a UI
+//                         image, staged on the SD card. Offset 0 starts a new update; a piece
+//                         that fails can be sent again. Without offset and total, ?size= sends
+//                         the whole image in one request.
 //   POST /ota/firmware    ?size=&sha256=&version=&uiSha256=, multipart file: write the
 //                         firmware to the spare slot, then restart to install
 //   POST /ota/installUi   install the staged UI image only (recovery), then restart
@@ -69,8 +72,21 @@ class Ota {
     bool uiMissing = false;
     String uiVersion;          // from /www/version.json
     Sha stagedUiSha;           // a complete, verified UI image in UI_NEW_PATH
-    size_t stagedUiSize = 0;
-    Upload uiUpload;
+    // The UI image being staged on the SD card, one request per piece
+    size_t uiStagingTotal = 0; // its size, 0 = none in progress
+    size_t uiStagingEnd = 0;   // how much of it has arrived
+    struct UiPiece {
+        bool started = false;
+        int errorCode = 0;
+        String error;
+        size_t offset = 0;
+        size_t received = 0;
+        bool complete = false; // the last piece, and the image checked out
+        File file;
+    };
+    UiPiece uiPiece;
+    void failUiPiece(int code, const String &error);
+    void finishUiStaging(const String &expectedSha);
     Upload fwUpload;
     String fwTargetVersion;
 

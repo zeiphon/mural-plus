@@ -43,6 +43,76 @@ namespace {
         }
     }
 
+    // The SD card now and then refuses a write, early in a new file (about one
+    // upload in three on the test board, 2026-11-22). After an error FatFs
+    // refuses everything on that open file, so reopen it at the same position
+    // and try again.
+    constexpr int SD_ATTEMPTS = 3;
+
+    String toHex(const uint8_t *bytes, size_t len);
+
+    bool reopenAt(File &f, const char *path, const char *mode, size_t offset) {
+        f.close();
+        vTaskDelay(pdMS_TO_TICKS(20));
+        f = SD.open(path, mode);
+        return f && f.seek(offset);
+    }
+
+    bool writeAt(File &f, const char *path, size_t offset, const uint8_t *data, size_t len) {
+        for (int attempt = 1;; attempt++) {
+            errno = 0;
+            if (f && f.write(data, len) == len) {
+                return true;
+            }
+            Log.printf("OTA: SD write of %u bytes at %u failed (errno %d)%s\n", (unsigned)len, (unsigned)offset, errno,
+                attempt < SD_ATTEMPTS ? ", retrying" : "");
+            if (attempt >= SD_ATTEMPTS || !reopenAt(f, path, "r+", offset)) {
+                return false;
+            }
+        }
+    }
+
+    bool readAt(File &f, const char *path, size_t offset, uint8_t *data, size_t len) {
+        for (int attempt = 1;; attempt++) {
+            errno = 0;
+            if (f && f.read(data, len) == len) {
+                return true;
+            }
+            Log.printf("OTA: SD read of %u bytes at %u failed (errno %d)%s\n", (unsigned)len, (unsigned)offset, errno,
+                attempt < SD_ATTEMPTS ? ", retrying" : "");
+            if (attempt >= SD_ATTEMPTS || !reopenAt(f, path, "r", offset)) {
+                return false;
+            }
+        }
+    }
+
+    // SHA-256 of a file on the SD card, or "" if it can't be read.
+    String shaOfFile(const char *path, size_t size) {
+        File f = SD.open(path, "r");
+        if (!f || f.size() != size) {
+            return "";
+        }
+        uint8_t *buf = (uint8_t *)malloc(4096);
+        if (!buf) {
+            return "";
+        }
+        mbedtls_sha256_context ctx;
+        mbedtls_sha256_init(&ctx);
+        mbedtls_sha256_starts_ret(&ctx, 0);
+        bool ok = true;
+        for (size_t off = 0; off < size && ok; off += 4096) {
+            size_t n = size - off < 4096 ? size - off : 4096;
+            ok = readAt(f, path, off, buf, n);
+            mbedtls_sha256_update_ret(&ctx, buf, n);
+        }
+        uint8_t hash[32];
+        mbedtls_sha256_finish_ret(&ctx, hash);
+        mbedtls_sha256_free(&ctx);
+        free(buf);
+        f.close();
+        return ok ? toHex(hash, sizeof(hash)) : "";
+    }
+
     String toHex(const uint8_t *bytes, size_t len) {
         static const char digits[] = "0123456789abcdef";
         String out;
@@ -283,7 +353,7 @@ bool Ota::backupUi(String &error) {
     mbedtls_sha256_starts_ret(&ctx, 0);
     bool ok = true;
     for (size_t off = 0; off < part->size && ok; off += CHUNK) {
-        ok = esp_partition_read(part, off, buf, CHUNK) == ESP_OK && f.write(buf, CHUNK) == CHUNK;
+        ok = esp_partition_read(part, off, buf, CHUNK) == ESP_OK && writeAt(f, UI_BACKUP_PATH, off, buf, CHUNK);
         mbedtls_sha256_update_ret(&ctx, buf, CHUNK);
         if ((off / CHUNK) % 16 == 15) {
             vTaskDelay(1);
@@ -329,7 +399,7 @@ bool Ota::writeUiPartition(const char *path, const String &expectedSha, String &
     }
     bool ok = true;
     for (size_t off = 0; off < part->size && ok; off += CHUNK) {
-        ok = f.read(buf, CHUNK) == CHUNK
+        ok = readAt(f, path, off, buf, CHUNK)
             && esp_partition_erase_range(part, off, CHUNK) == ESP_OK
             && esp_partition_write(part, off, buf, CHUNK) == ESP_OK;
         if ((off / CHUNK) % 16 == 15) {
@@ -456,95 +526,134 @@ Ota::Sha Ota::finishSha(Upload &upload) {
     return toHex(hash, sizeof(hash));
 }
 
-// Stages a UI image on the SD card. Starting a UI upload starts a new update:
-// the previous staged image and backup are deleted.
+void Ota::failUiPiece(int code, const String &error) {
+    if (uiPiece.errorCode == 0) {
+        uiPiece.errorCode = code;
+        uiPiece.error = error;
+        Log.printf("OTA: web UI upload failed: %s\n", error.c_str());
+    }
+    uiPiece.file.close();
+}
+
+// Stages a UI image on the SD card, a piece per request like the drawing
+// upload, so a piece the card refuses can be sent again. Offset 0 starts a new
+// update: the previous staged image and backup are deleted.
 void Ota::handleUiUpload(AsyncWebServerRequest *request, size_t index, uint8_t *data, size_t len, bool final) {
     if (index == 0) {
-        if (!startUpload(uiUpload, request, false)) {
+        uiPiece = UiPiece();
+        uiPiece.started = true;
+        const char *why = busy ? busy() : nullptr;
+        if (why) {
+            failUiPiece(409, why);
             return;
         }
-        if (Update.isRunning()) {
-            Update.abort();
-        }
+        auto param = [request](const char *name) -> size_t {
+            return request->hasParam(name) ? strtoul(request->getParam(name)->value().c_str(), nullptr, 10) : 0;
+        };
+        size_t total = request->hasParam("total") ? param("total") : param("size"); // size: the whole image at once
+        uiPiece.offset = param("offset");
         const esp_partition_t *part = uiPartition();
         size_t partSize = part ? part->size : 0;
-        if (uiUpload.expected != partSize) {
-            failUpload(uiUpload, 400, "That isn't a web UI image for this board (" + String(uiUpload.expected)
-                + " bytes, expected " + String(partSize) + ")");
+        if (total != partSize) {
+            failUiPiece(400, "That isn't a web UI image for this board (" + String((unsigned)total)
+                + " bytes, expected " + String((unsigned)partSize) + ")");
             return;
         }
-        stagedUiSha = "";
-        prefs.remove("bakSha");
-        removeFile(UI_NEW_PATH);
-        removeFile(UI_BACKUP_PATH);
-        SD.mkdir(OTA_DIR);
-        uint64_t freeBytes = SD.totalBytes() - SD.usedBytes();
-        uint64_t needed = 2 * (uint64_t)partSize + 64 * 1024; // new image and backup
-        if (freeBytes < needed) {
-            failUpload(uiUpload, 400, "Not enough space on the SD card: an update needs "
-                + String((unsigned)(needed / 1024)) + " KB free");
+        if (uiPiece.offset == 0) {
+            if (Update.isRunning()) {
+                Update.abort();
+            }
+            stagedUiSha = "";
+            uiStagingTotal = 0;
+            uiStagingEnd = 0;
+            if (prefs.isKey("bakSha")) {
+                prefs.remove("bakSha");
+            }
+            removeFile(UI_NEW_PATH);
+            removeFile(UI_BACKUP_PATH);
+            SD.mkdir(OTA_DIR);
+            uint64_t freeBytes = SD.totalBytes() - SD.usedBytes();
+            uint64_t needed = 2 * (uint64_t)partSize + 64 * 1024; // new image and backup
+            if (freeBytes < needed) {
+                failUiPiece(400, "Not enough space on the SD card: an update needs "
+                    + String((unsigned)(needed / 1024)) + " KB free");
+                return;
+            }
+            uiPiece.file = SD.open(UI_NEW_PATH, "w");
+            uiStagingTotal = total;
+            Log.println("OTA: receiving the web UI");
+        } else {
+            if (uiStagingTotal != total || uiPiece.offset > uiStagingEnd) {
+                failUiPiece(409, "Upload out of order, start again");
+                return;
+            }
+            uiPiece.file = SD.open(UI_NEW_PATH, "r+");
+            if (uiPiece.file && !uiPiece.file.seek(uiPiece.offset)) {
+                uiPiece.file.close();
+            }
+        }
+        if (!uiPiece.file) {
+            failUiPiece(500, "Couldn't open the update file on the SD card");
             return;
         }
-        uiUpload.file = SD.open(UI_NEW_PATH, "w");
-        if (!uiUpload.file) {
-            failUpload(uiUpload, 500, "Couldn't create the update file on the SD card");
-            return;
-        }
-        Log.println("OTA: receiving the web UI");
     }
-    if (!uiUpload.active) {
+    if (uiPiece.errorCode) {
         return;
     }
     if (len) {
-        uiUpload.received += len;
-        if (uiUpload.received > uiUpload.expected) {
-            failUpload(uiUpload, 400, "More data than the given size");
-            removeFile(UI_NEW_PATH);
+        size_t at = uiPiece.offset + uiPiece.received;
+        if (at + len > uiStagingTotal) {
+            failUiPiece(400, "More data than the image's size");
             return;
         }
-        bool open = (bool)uiUpload.file;
-        errno = 0;
-        size_t written = uiUpload.file.write(data, len);
-        if (written < len && open) {
-            // A short write: try the rest once more before giving up.
-            int firstErrno = errno;
-            vTaskDelay(1);
-            written += uiUpload.file.write(data + written, len - written);
-            Log.printf("OTA: short SD write (errno %d), retry %s\n", firstErrno, written == len ? "worked" : "failed");
-        }
-        if (written != len) {
-            failUpload(uiUpload, 500, "Writing to the SD card failed: wrote " + String((unsigned)written) + " of "
-                + String((unsigned)len) + " bytes at " + String((unsigned)(uiUpload.received - len))
-                + ", errno " + String(errno) + (open ? "" : ", file not open"));
-            removeFile(UI_NEW_PATH);
+        if (!writeAt(uiPiece.file, UI_NEW_PATH, at, data, len)) {
+            failUiPiece(500, "Writing to the SD card failed at byte " + String((unsigned)at));
             return;
         }
-        mbedtls_sha256_update_ret(&uiUpload.sha, data, len);
+        uiPiece.received += len;
     }
     if (final) {
-        uiUpload.file.close();
-        Sha sha = finishSha(uiUpload);
-        if (uiUpload.received != uiUpload.expected) {
-            failUpload(uiUpload, 400, "The upload was incomplete");
-        } else if (uiUpload.expectedSha.length() && sha != uiUpload.expectedSha) {
-            failUpload(uiUpload, 400, "The web UI image was damaged in transfer");
-        } else {
-            stagedUiSha = sha;
-            Log.println("OTA: web UI received");
-            return;
+        uiPiece.file.close();
+        size_t end = uiPiece.offset + uiPiece.received;
+        if (end > uiStagingEnd) {
+            uiStagingEnd = end;
         }
-        removeFile(UI_NEW_PATH);
+        if (end == uiStagingTotal) {
+            String expectedSha = request->hasParam("sha256") ? request->getParam("sha256")->value() : "";
+            expectedSha.toLowerCase();
+            finishUiStaging(expectedSha);
+        }
     }
 }
 
+// The last piece is in: check the whole image as it is on the card.
+void Ota::finishUiStaging(const String &expectedSha) {
+    String sha = shaOfFile(UI_NEW_PATH, uiStagingTotal);
+    if (sha.isEmpty()) {
+        failUiPiece(500, "Reading the web UI image back from the SD card failed");
+    } else if (expectedSha.length() && sha != expectedSha) {
+        failUiPiece(400, "The web UI image was damaged in transfer");
+    } else {
+        stagedUiSha = sha;
+        uiPiece.complete = true;
+        Log.println("OTA: web UI received");
+        return;
+    }
+    uiStagingTotal = 0;
+    uiStagingEnd = 0;
+    removeFile(UI_NEW_PATH);
+}
+
+// Responds with the image's SHA-256 after the last piece, or OK.
 void Ota::handleUiDone(AsyncWebServerRequest *request) {
-    if (uiUpload.errorCode) {
-        request->send(uiUpload.errorCode, "text/plain", uiUpload.error);
-    } else if (uiUpload.active || stagedUiSha.isEmpty()) {
+    if (uiPiece.errorCode) {
+        request->send(uiPiece.errorCode, "text/plain", uiPiece.error);
+    } else if (!uiPiece.started) {
         request->send(400, "text/plain", "No web UI image received");
     } else {
-        request->send(200, "text/plain", stagedUiSha);
+        request->send(200, "text/plain", uiPiece.complete ? stagedUiSha : String("OK"));
     }
+    uiPiece.started = false;
 }
 
 // Writes the firmware to the spare slot. The UI image has to be staged first,
@@ -662,7 +771,9 @@ void Ota::handleInstallUi(AsyncWebServerRequest *request) {
 
 void Ota::handleDismiss(AsyncWebServerRequest *request) {
     prefs.putUChar("result", NO_RESULT);
-    prefs.remove("reason");
+    if (prefs.isKey("reason")) {
+        prefs.remove("reason");
+    }
     request->send(200, "text/plain", "OK");
 }
 

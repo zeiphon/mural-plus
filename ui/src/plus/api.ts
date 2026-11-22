@@ -134,6 +134,13 @@ export function errorMessage(err: unknown): string {
 export const getOtaStatus = (): Promise<OtaStatus> => request('GET', '/ota/status')
 export const dismissOtaResult = (): Promise<string> => request('POST', '/ota/dismiss')
 
+/** An upload error, with the HTTP status (0 when the connection failed). */
+export class UploadError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message)
+  }
+}
+
 /** Uploads one part of an update as a multipart file, reporting progress (0–100). */
 export function uploadOtaPart(url: string, blob: Blob, onProgress: (pct: number) => void): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -146,8 +153,8 @@ export function uploadOtaPart(url: string, blob: Blob, onProgress: (pct: number)
     xhr.onload = () =>
       xhr.status >= 200 && xhr.status < 300
         ? resolve(xhr.responseText)
-        : reject(new Error(xhr.responseText || `Upload failed: ${xhr.status}`))
-    xhr.onerror = () => reject(new Error('Network error during the upload'))
+        : reject(new UploadError(xhr.responseText || `Upload failed: ${xhr.status}`, xhr.status))
+    xhr.onerror = () => reject(new UploadError('Network error during the upload', 0))
     xhr.open('POST', url)
     xhr.send(form)
   })
