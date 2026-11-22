@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Card } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Slider } from '../../components/Slider'
 import { showAlert } from '../../components/AlertModal'
 import { run, goHome, errorMessage } from '../api'
 import type { PlusState } from '../types'
-import { DEFAULT_SPEED, loadSpeed, saveSpeed } from '../storage'
+import { DEFAULT_SPEED, MAX_SPEED, MIN_SPEED, SPEED_STEP, useSpeed } from '../storage'
 import { stepDone, WIZARD_STEPS, type WizardStep } from './steps'
 
 interface Props {
@@ -17,11 +17,9 @@ interface Props {
 
 /** The wizard's last step: a summary of the setup, and Begin drawing. */
 export function StartScreen({ state, onStarted, onStateChange, onOpenStep }: Props) {
-  const [speed, setSpeed] = useState(loadSpeed)
+  const [speed, setSpeed] = useSpeed()
   const [starting, setStarting] = useState(false)
   const busy = state.status !== 'idle'
-
-  useEffect(() => saveSpeed(speed), [speed])
 
   async function handleGoHome() {
     try {
@@ -101,7 +99,7 @@ export function StartScreen({ state, onStarted, onStateChange, onOpenStep }: Pro
           More options{speed !== DEFAULT_SPEED && ` (speed ${speed} steps/s)`}
         </summary>
         <div className="mt-3 space-y-2">
-          <Slider label="Speed (steps/s)" min={300} max={2000} step={50} value={speed} onChange={setSpeed} />
+          <Slider label="Speed (steps/s)" min={MIN_SPEED} max={MAX_SPEED} step={SPEED_STEP} value={speed} onChange={setSpeed} />
           <p className="text-xs text-yellow-400">⚠ Speed control is experimental. Use {DEFAULT_SPEED} for best results.</p>
           {speed !== DEFAULT_SPEED && (
             <button onClick={() => setSpeed(DEFAULT_SPEED)} className="text-xs text-cyan-400 hover:text-cyan-300">

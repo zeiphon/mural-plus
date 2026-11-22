@@ -18,9 +18,8 @@ import { Help } from '../components/Help'
 import { NumberField, SmallButton } from '../components/Controls'
 import { FirmwareSummary } from './FirmwareSettings'
 import { BeltSettings } from './BeltSettings'
-import type { UiChoice } from '../storage'
+import { DEFAULT_SPEED, SPEED_STEP, useSpeed, type UiChoice } from '../storage'
 
-const SPEED_STEP = 50 // steps/s, same step as the speed slider
 
 /**
  * Plus mode's settings: pen, belts, drawing and firmware. The pen angles and
@@ -151,19 +150,22 @@ export function PlusSettings(props: {
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
-            <Toggle
-              label="Keep this page working while drawing"
-              checked={state.settings.webWhileDrawing}
-              onChange={(on) => update(() => setWebWhileDrawing(on))}
-            />
-            <Help label="What happens if it's off">
-              <p>
-                Mural stops its web server during a drawing, like upstream Mural, and the page reconnects when the
-                drawing ends.
-              </p>
-            </Help>
-          </div>
+          <>
+            <NextSpeed />
+            <div className="space-y-2">
+              <Toggle
+                label="Keep this page working while drawing"
+                checked={state.settings.webWhileDrawing}
+                onChange={(on) => update(() => setWebWhileDrawing(on))}
+              />
+              <Help label="What happens if it's off">
+                <p>
+                  Mural stops its web server during a drawing, like upstream Mural, and the page reconnects when the
+                  drawing ends.
+                </p>
+              </Help>
+            </div>
+          </>
         )}
       </Section>
 
@@ -193,6 +195,34 @@ export function PlusSettings(props: {
           This browser remembers the choice.
         </p>
       </Section>
+    </div>
+  )
+}
+
+/** The speed the next drawing starts at. Kept in this browser, like upstream's speed slider. */
+function NextSpeed() {
+  const [speed, setSpeed] = useSpeed()
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm text-gray-200">Speed</p>
+          <p className="text-xs text-gray-500">For the next drawing</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <SmallButton onClick={() => setSpeed(speed - SPEED_STEP)}>−</SmallButton>
+          <span className="w-24 text-center font-mono text-sm text-gray-200">{speed} steps/s</span>
+          <SmallButton onClick={() => setSpeed(speed + SPEED_STEP)}>+</SmallButton>
+        </div>
+      </div>
+      {speed !== DEFAULT_SPEED && (
+        <p className="text-xs text-yellow-400">
+          ⚠ Speed control is experimental. Use {DEFAULT_SPEED} for best results.{' '}
+          <button onClick={() => setSpeed(DEFAULT_SPEED)} className="text-cyan-400 hover:text-cyan-300 underline">
+            Back to {DEFAULT_SPEED}
+          </button>
+        </p>
+      )}
     </div>
   )
 }

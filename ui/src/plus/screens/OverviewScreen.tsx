@@ -1,27 +1,25 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../../components/Card'
 import { Button } from '../../components/Button'
-import { Slider } from '../../components/Slider'
 import { showAlert } from '../../components/AlertModal'
 import { getPlusState, run, goHome, resetPen, errorMessage } from '../api'
 import type { PlusState, SetupStep } from '../types'
+import { DEFAULT_SPEED, useSpeed } from '../storage'
 
 interface Props {
   state: PlusState
   onOpen: (step: SetupStep) => void
   onStarted: (state: PlusState) => void
   onStateChange: (state: PlusState) => void
+  /** Opens the settings, where the speed is changed */
+  onOpenSettings: () => void
 }
 
 /** The setup steps, which can be done in any order, and the start button. */
-export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Props) {
-  const [speed, setSpeed] = useState<number>(() => parseInt(localStorage.getItem('muralSpeed') ?? '650', 10))
+export function OverviewScreen({ state, onOpen, onStarted, onStateChange, onOpenSettings }: Props) {
+  const [speed] = useSpeed()
   const [starting, setStarting] = useState(false)
   const busy = state.status !== 'idle'
-
-  useEffect(() => {
-    localStorage.setItem('muralSpeed', String(speed))
-  }, [speed])
 
   // While Mural is moving, keep refreshing until it stops.
   useEffect(() => {
@@ -162,9 +160,14 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange }: Prop
         </div>
       )}
 
-      <div className="space-y-2">
-        <Slider label="Speed (steps/s)" min={300} max={2000} step={50} value={speed} onChange={setSpeed} />
-        <p className="text-xs text-yellow-400">⚠ Speed control is experimental. Use 650 for best results.</p>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="text-gray-400">
+          Speed <span className="font-mono text-gray-200">{speed} steps/s</span>
+          {speed !== DEFAULT_SPEED && <span className="text-yellow-400"> (experimental)</span>}
+        </span>
+        <button onClick={onOpenSettings} className="text-cyan-400 hover:text-cyan-300 transition-colors">
+          Change in ⚙
+        </button>
       </div>
       <Button onClick={handleStart} disabled={!state.ready.all || busy || starting}>
         {starting ? 'Starting…' : 'Start drawing'}

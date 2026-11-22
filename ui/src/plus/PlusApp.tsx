@@ -330,6 +330,7 @@ export function PlusApp() {
             setView('drawing')
           }}
           onStateChange={setState}
+          onOpenSettings={() => setPlusSettingsOpen(true)}
         />
       )
       break
