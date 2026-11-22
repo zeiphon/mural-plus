@@ -43,6 +43,7 @@ CHIP = "esp32"              # esptool --chip
 CHIP_FAMILY = "ESP32"       # ESP Web Tools chipFamily
 PRODUCT_NAME = "Mural Plus"
 DEFAULT_REPO = "zeiphon/mural-plus"
+INSTALLER_URL = "https://zeiphon.github.io/mural-plus-installer/v2/"  # published by the release workflow
 UPDATE_MAGIC = b"MURALUPD"
 UPDATE_FORMAT = 1
 FULL_LIMIT = 0.90           # fail if the firmware or the web UI fills more of its partition than this
@@ -252,7 +253,6 @@ def main():
     (site / "manifest-update.json").write_text(json.dumps(update, indent=2) + "\n")
 
     usb_update_args = " ".join(f"{hex(p['offset'])} {Path(p['path']).name}" for p in update_parts)
-    owner, _, name = repo.partition("/")
     page = (ROOT / "flasher" / "index.html").read_text(encoding="utf-8")
     page = (page.replace("{{VERSION}}", version)
                 .replace("{{REPO_URL}}", f"https://github.com/{repo}")
@@ -267,7 +267,7 @@ If Mural already runs a version of {PRODUCT_NAME} that can update itself, downlo
 
 ## Installing over USB
 
-The easiest way is the web installer: https://{owner.lower()}.github.io/{name}/v2/ (desktop Chrome or Edge, USB cable).
+The easiest way is the web installer: {INSTALLER_URL} (desktop Chrome or Edge, USB cable).
 
 To flash with [esptool](https://docs.espressif.com/projects/esptool/) instead:
 

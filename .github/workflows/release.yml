@@ -3,28 +3,43 @@ name: Release
 # Pushing a tag like v2-plus.1:
 #   - builds the firmware and creates a GitHub release with the .bin files,
 #     including the -update.bin file for updating from the browser;
-#   - publishes the web installers to GitHub Pages: this one at /v2/, and the
-#     v1.1 installer at /v1/, rebuilt from the latest v1.1-plus* tag, so both
-#     stay online. The front page links to both (flasher/home.html).
-# Running it by hand (Actions tab > Release > Run workflow) only builds, and keeps
-# the files as a downloadable workflow artifact, which is handy for testing a build.
+#   - publishes the web installer to the installer site (zeiphon/mural-plus-installer)
+#     as v2/, with the front page (flasher/home.html). The v1.1-plus branch
+#     publishes v1/ the same way, so neither release replaces the other's installer;
+#   - points this repo's old Pages address at the installer site.
 #
-# A release from the v1.1-plus branch deploys only its own installer, replacing
-# this combined site. After one, re-run this workflow's latest tagged run.
+# Running it by hand (Actions tab > Release > Run workflow):
+#   - with "Tag to publish" empty, it only builds, and keeps the files as a
+#     downloadable workflow artifact, which is handy for testing a build;
+#   - with a tag, it builds that tag and publishes its installer again, without
+#     creating a release.
+#
+# Publishing needs the INSTALLER_DEPLOY_KEY secret: the private half of a
+# deploy key with write access on the installer repo.
 
 on:
   push:
     tags: ["v2-plus*"]
   workflow_dispatch:
+    inputs:
+      publish_tag:
+        description: "Tag to publish again (for example v2-plus.1). Leave empty to only build."
+        required: false
+        default: ""
 
 permissions:
   contents: write   # create the release
-  pages: write      # deploy the installers
+  pages: write      # the redirect at the old address
   id-token: write   # required by deploy-pages
 
 concurrency:
   group: release
   cancel-in-progress: false
+
+env:
+  INSTALLER_REPO: zeiphon/mural-plus-installer
+  # What to build: the pushed tag, or the tag given when running it by hand
+  BUILD_REF: ${{ github.event_name == 'push' && github.ref || inputs.publish_tag || github.ref }}
 
 jobs:
   build:
@@ -32,6 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ env.BUILD_REF }}
           fetch-depth: 0   # git describe needs the tags for the version string
 
       - uses: actions/setup-python@v7
@@ -71,7 +87,7 @@ jobs:
           path: dist/
 
       - name: Create release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
         with:
           files: dist/release/*.bin
@@ -79,84 +95,48 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
 
-  # The v1.1 installer, built from the latest v1.1-plus release tag with that
-  # tag's own tooling, so the Pages site keeps it.
-  build-v1-installer:
-    if: startsWith(github.ref, 'refs/tags/')
+  publish-installer:
+    if: needs.build.result == 'success' && (github.event_name == 'push' || inputs.publish_tag != '')
+    needs: build
     runs-on: ubuntu-latest
     steps:
+      # This workflow's own branch, for the publish script and the front page,
+      # which may be newer than the tag being published
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Check out the latest v1.1-plus release
-        run: |
-          tag=$(git tag -l 'v1.1-plus*' --sort=-v:refname | head -1)
-          if [ -z "$tag" ]; then echo "No v1.1-plus tag found"; exit 1; fi
-          echo "Building the v1.1 installer from $tag"
-          git checkout --quiet "$tag"
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "20"
-
-      - name: Cache PlatformIO
-        uses: actions/cache@v6
-        with:
-          path: ~/.platformio
-          key: pio-v1-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-
-      - name: Install PlatformIO and esptool
-        run: pip install platformio esptool==4.9.0
-
-      - name: Install web worker dependencies
-        working-directory: tsc
-        run: npm install --ignore-scripts
-
-      - name: Build and package
-        run: python scripts/package_release.py
-
-      - name: Keep the installer
-        uses: actions/upload-artifact@v7
-        with:
-          name: v1-installer
-          path: dist/site/
-
-  pages:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [build, build-v1-installer]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
 
       - uses: actions/download-artifact@v8
         with:
           name: firmware
-          path: v2-dist
+          path: built
 
-      - uses: actions/download-artifact@v8
+      - name: Publish v2/ and the front page
+        env:
+          INSTALLER_DEPLOY_KEY: ${{ secrets.INSTALLER_DEPLOY_KEY }}
+        run: bash scripts/publish_installer.sh built/site v2 flasher/home.html
+
+  # The installers used to be at this repo's own Pages address. Pages only
+  # deploys from tags here (the github-pages environment's rules).
+  redirect-old-address:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the redirect pages
+        run: |
+          for dir in . v1 v2; do
+            mkdir -p "old-site/$dir"
+            cp flasher/redirect.html "old-site/$dir/index.html"
+          done
+          cp flasher/redirect.html old-site/404.html
+
+      - uses: actions/upload-pages-artifact@v5
         with:
-          name: v1-installer
-          path: v1-site
+          path: old-site
 
-      - name: Build the site
-        run: python scripts/build_pages_site.py v2-dist/site v1-site pages-site
-
-      - name: Upload the site
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: pages-site
-
-  deploy:
-    needs: pages
+  deploy-redirect:
+    needs: redirect-old-address
     runs-on: ubuntu-latest
     environment:
       name: github-pages
