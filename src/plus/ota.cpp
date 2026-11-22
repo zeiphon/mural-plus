@@ -124,16 +124,22 @@ namespace {
         return out;
     }
 
-    String shaOfPartition(const esp_partition_t *part, uint8_t *buf) {
+    // SHA-256 of the first `length` bytes of a partition (all of it by default),
+    // or "" if it can't be read. `buf` holds CHUNK bytes.
+    String shaOfPartition(const esp_partition_t *part, uint8_t *buf, size_t length = SIZE_MAX) {
+        if (length > part->size) {
+            length = part->size;
+        }
         mbedtls_sha256_context ctx;
         mbedtls_sha256_init(&ctx);
         mbedtls_sha256_starts_ret(&ctx, 0);
-        for (size_t off = 0; off < part->size; off += CHUNK) {
-            if (esp_partition_read(part, off, buf, CHUNK) != ESP_OK) {
+        for (size_t off = 0; off < length; off += CHUNK) {
+            size_t n = length - off < CHUNK ? length - off : CHUNK;
+            if (esp_partition_read(part, off, buf, n) != ESP_OK) {
                 mbedtls_sha256_free(&ctx);
                 return "";
             }
-            mbedtls_sha256_update_ret(&ctx, buf, CHUNK);
+            mbedtls_sha256_update_ret(&ctx, buf, n);
         }
         uint8_t hash[32];
         mbedtls_sha256_finish_ret(&ctx, hash);
@@ -728,12 +734,25 @@ void Ota::handleFirmwareUpload(AsyncWebServerRequest *request, size_t index, uin
         prefs.putUChar("result", NO_RESULT);
         prefs.putString("reason", "");
         prefs.putUChar("state", PENDING);
+        const esp_partition_t *target = esp_ota_get_next_update_partition(nullptr); // where Update wrote it
         if (!Update.end()) {
             prefs.putUChar("state", IDLE);
             failUpload(fwUpload, 400, String("The firmware was rejected: ") + Update.errorString());
             return;
         }
-        Log.printf("OTA: firmware %s written, restarting to install it\n", fwTargetVersion.c_str());
+        // Update.end() checked the image's own hash. Also check that the slot holds
+        // exactly the firmware from the update file, and switch back if it doesn't.
+        uint8_t *buf = (uint8_t *)malloc(CHUNK);
+        String written = buf && target ? shaOfPartition(target, buf, fwUpload.expected) : String();
+        free(buf);
+        if (written != fwUpload.expectedSha) {
+            esp_ota_set_boot_partition(esp_ota_get_running_partition());
+            prefs.putUChar("state", IDLE);
+            failUpload(fwUpload, 500, written.isEmpty() ? "Couldn't read the new firmware back to check it"
+                                                        : "The firmware in flash doesn't match the update file");
+            return;
+        }
+        Log.printf("OTA: firmware %s written and checked, restarting to install it\n", fwTargetVersion.c_str());
     }
 }
 
