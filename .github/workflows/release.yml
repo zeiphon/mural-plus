@@ -1,23 +1,41 @@
 name: Release
 
-# Pushing a tag like v1.1-plus.1 builds the firmware, creates a GitHub release with
-# the .bin files attached, and publishes the web installer to GitHub Pages.
-# Running it by hand (Actions tab > Release > Run workflow) only builds, and keeps the
-# files as a downloadable workflow artifact, which is handy for testing a build.
+# Pushing a tag like v1.1-plus.1:
+#   - builds the firmware and creates a GitHub release with the .bin files attached;
+#   - publishes the web installer to the installer site (zeiphon/mural-plus-installer)
+#     as v1/. The v2-plus branch publishes v2/ and the front page the same way,
+#     so neither release replaces the other's installer.
+#
+# Running it by hand (Actions tab > Release > Run workflow):
+#   - with "Tag to publish" empty, it only builds, and keeps the files as a
+#     downloadable workflow artifact, which is handy for testing a build;
+#   - with a tag, it builds that tag and publishes its installer again, without
+#     creating a release.
+#
+# Publishing needs the INSTALLER_DEPLOY_KEY secret: the private half of a
+# deploy key with write access on the installer repo.
 
 on:
   push:
-    tags: ["v*-plus*"]
+    tags: ["v1.1-plus*"]
   workflow_dispatch:
+    inputs:
+      publish_tag:
+        description: "Tag to publish again (for example v1.1-plus.1). Leave empty to only build."
+        required: false
+        default: ""
 
 permissions:
   contents: write   # create the release
-  pages: write      # deploy the installer
-  id-token: write   # required by deploy-pages
 
 concurrency:
   group: release
   cancel-in-progress: false
+
+env:
+  INSTALLER_REPO: zeiphon/mural-plus-installer
+  # What to build: the pushed tag, or the tag given when running it by hand
+  BUILD_REF: ${{ github.event_name == 'push' && github.ref || inputs.publish_tag || github.ref }}
 
 jobs:
   build:
@@ -25,6 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ env.BUILD_REF }}
           fetch-depth: 0   # git describe needs the tags for the version string
 
       - uses: actions/setup-python@v7
@@ -57,14 +76,8 @@ jobs:
           name: firmware
           path: dist/
 
-      - name: Upload installer site
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist/site
-
       - name: Create release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
         with:
           files: dist/release/*.bin
@@ -72,13 +85,21 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
 
-  deploy:
-    if: startsWith(github.ref, 'refs/tags/')
+  publish-installer:
+    if: needs.build.result == 'success' && (github.event_name == 'push' || inputs.publish_tag != '')
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v5
+      # This workflow's own branch, for the publish script, which the tag being
+      # published may not have
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: firmware
+          path: built
+
+      - name: Publish v1/
+        env:
+          INSTALLER_DEPLOY_KEY: ${{ secrets.INSTALLER_DEPLOY_KEY }}
+        run: bash scripts/publish_installer.sh built/site v1

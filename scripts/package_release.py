@@ -33,7 +33,8 @@ CHIP = "esp32"              # esptool --chip
 CHIP_FAMILY = "ESP32"       # ESP Web Tools chipFamily
 PRODUCT = "mural-1-plus"
 PRODUCT_NAME = "Mural 1 Plus"
-DEFAULT_REPO = "zeiphon/mural-1-plus"
+DEFAULT_REPO = "zeiphon/mural-plus"
+INSTALLER_URL = "https://zeiphon.github.io/mural-plus-installer/v1/"  # published by the release workflow
 
 
 def platformio_home():
@@ -165,7 +166,6 @@ def main():
     (site / "manifest-install.json").write_text(json.dumps(install, indent=2) + "\n")
     (site / "manifest-update.json").write_text(json.dumps(update, indent=2) + "\n")
 
-    owner, _, name = repo.partition("/")
     page = (ROOT / "flasher" / "index.html").read_text(encoding="utf-8")
     page = (page.replace("{{VERSION}}", version)
                 .replace("{{REPO_URL}}", f"https://github.com/{repo}")
@@ -178,7 +178,7 @@ def main():
 
     notes = f"""## Installing
 
-The easiest way is the web installer: https://{owner.lower()}.github.io/{name}/ (desktop Chrome or Edge, USB cable).
+The easiest way is the web installer: {INSTALLER_URL} (desktop Chrome or Edge, USB cable).
 
 To flash with [esptool](https://docs.espressif.com/projects/esptool/) instead:
 
