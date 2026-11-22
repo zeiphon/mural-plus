@@ -16,7 +16,7 @@ import {
 import type { PlusState } from '../types'
 import { Help } from '../components/Help'
 import { NumberField, SmallButton } from '../components/Controls'
-import { FirmwareSettings } from './FirmwareSettings'
+import { FirmwareSummary } from './FirmwareSettings'
 import { BeltSettings } from './BeltSettings'
 
 const SPEED_STEP = 50 // steps/s, same step as the speed slider
@@ -25,7 +25,7 @@ const SPEED_STEP = 50 // steps/s, same step as the speed slider
  * Plus mode's settings: pen, belts, drawing and firmware. The pen angles and
  * drawing speed can be changed while drawing; the rest is hidden or off then.
  */
-export function PlusSettings() {
+export function PlusSettings({ onOpenUpdate }: { onOpenUpdate: () => void }) {
   const [state, setState] = useState<PlusState | null>(null)
 
   function reload() {
@@ -68,7 +68,7 @@ export function PlusSettings() {
   const parkAngle = Math.max(0, pen.min)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Section title="Pen">
         <AngleRow
           label="Down angle"
@@ -163,7 +163,7 @@ export function PlusSettings() {
       </Section>
 
       <Section title="Firmware">
-        <FirmwareSettings drawing={drawing} />
+        <FirmwareSummary onOpenUpdate={onOpenUpdate} />
       </Section>
     </div>
   )
@@ -248,10 +248,10 @@ function AngleRow(props: {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="space-y-4">
-      <h3 className="text-xs sm:text-sm text-gray-400 uppercase tracking-wide">{title}</h3>
+    <section className="rounded-xl border border-gray-700/70 bg-gray-800/40 p-4 sm:p-5 space-y-4">
+      <h3 className="text-xs sm:text-sm font-semibold text-cyan-400 uppercase tracking-wide">{title}</h3>
       {children}
-    </div>
+    </section>
   )
 }
 

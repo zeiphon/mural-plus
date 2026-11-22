@@ -5,6 +5,7 @@ import { errorMessage, getOtaStatus } from '../api'
 import { installUpdate, readUpdateFile, type InstallStep, type UpdateFile } from '../update'
 import type { OtaStatus } from '../types'
 import { Help } from '../components/Help'
+import { SmallButton } from '../components/Controls'
 
 const STEP_LABELS: Record<InstallStep, string> = {
   ui: 'Uploading the web UI',
@@ -12,24 +13,63 @@ const STEP_LABELS: Record<InstallStep, string> = {
   restarting: 'Restarting and installing. This can take a minute…',
 }
 
-/** The installed version, and installing an update file (src/plus/ota.cpp). */
-export function FirmwareSettings({ drawing }: { drawing: boolean }) {
+function useOtaStatus() {
   const [status, setStatus] = useState<OtaStatus | null>(null)
-  const [update, setUpdate] = useState<UpdateFile | null>(null)
-  const [fileError, setFileError] = useState<string | null>(null)
-  const [progress, setProgress] = useState<{ step: InstallStep; pct: number } | null>(null)
-
   useEffect(() => {
     getOtaStatus()
       .then(setStatus)
       .catch(() => {})
   }, [])
+  return [status, setStatus] as const
+}
+
+/** The installed version, for the main settings page, and the way to the update page. */
+export function FirmwareSummary({ onOpenUpdate }: { onOpenUpdate: () => void }) {
+  const [status] = useOtaStatus()
+  return (
+    <div className="space-y-3">
+      {status ? <VersionInfo status={status} /> : <p className="text-sm text-gray-500">Loading…</p>}
+      <SmallButton onClick={onOpenUpdate}>Install an update ›</SmallButton>
+    </div>
+  )
+}
+
+function VersionInfo({ status }: { status: OtaStatus }) {
+  return (
+    <div className="text-sm text-gray-200">
+      Version <span className="font-mono text-gray-400">{status.firmware}</span>
+      <p className="text-xs text-gray-500">Firmware slot {status.slot}</p>
+      {status.ui && status.ui !== status.firmware && (
+        <p className="text-xs text-yellow-400">
+          The web UI is version {status.ui}, which doesn't match the firmware. Install an update to fix it.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** Installing an update file (src/plus/ota.cpp). Tells the settings modal while it's installing, so it can't be closed. */
+export function FirmwareUpdate({
+  drawing,
+  onInstallingChange,
+}: {
+  drawing: boolean
+  onInstallingChange: (installing: boolean) => void
+}) {
+  const [status, setStatus] = useOtaStatus()
+  const [update, setUpdate] = useState<UpdateFile | null>(null)
+  const [fileError, setFileError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ step: InstallStep; pct: number } | null>(null)
+  const installing = progress !== null
+
+  useEffect(() => {
+    onInstallingChange(installing)
+  }, [installing, onInstallingChange])
 
   if (!status) {
     return <p className="text-sm text-gray-500">Loading…</p>
   }
 
-  const installing = progress !== null
   const blocked = drawing ? 'Not available while drawing' : status.busy
 
   async function handleFile(file: File | undefined) {
@@ -64,15 +104,7 @@ export function FirmwareSettings({ drawing }: { drawing: boolean }) {
 
   return (
     <div className="space-y-3">
-      <div className="text-sm text-gray-200">
-        Version <span className="font-mono text-gray-400">{status.firmware}</span>
-        <p className="text-xs text-gray-500">Firmware slot {status.slot}</p>
-        {status.ui && status.ui !== status.firmware && (
-          <p className="text-xs text-yellow-400">
-            The web UI is version {status.ui}, which doesn't match the firmware. Install an update to fix it.
-          </p>
-        )}
-      </div>
+      <VersionInfo status={status} />
 
       {installing ? (
         <ProgressBar

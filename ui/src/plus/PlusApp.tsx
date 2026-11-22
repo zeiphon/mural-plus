@@ -23,6 +23,7 @@ import { DrawingScreen } from './screens/DrawingScreen'
 import { PenScreen } from './screens/PenScreen'
 import { DiagnosticsScreen } from './screens/DiagnosticsScreen'
 import { PlusSettingsModal } from './settings/PlusSettingsModal'
+import { useBackButton } from './backButton'
 
 type View =
   | 'loading'
@@ -138,6 +139,10 @@ export function PlusApp() {
     }
   }
 
+  function handleBackFromChooseRenderer() {
+    setView(inputType === 'raster' ? 'RasterSelect' : 'SvgSelect')
+  }
+
   function handleBackFromDrawingPreview() {
     if (inputType === 'raster' && getRenderersByInputType('raster').length === 1) {
       setView('RasterSelect')
@@ -156,6 +161,32 @@ export function PlusApp() {
     setView('overview')
     if (message) await showAlert(message)
   }
+
+  // The browser's back button does what the screen's own back button does.
+  // During an upload it does nothing, rather than leave the page and abandon
+  // the upload. Elsewhere (the overview, a drawing, a restart) it leaves the page as usual.
+  function backAction(): (() => void) | null {
+    switch (view) {
+      case 'distance':
+      case 'belts':
+      case 'pen':
+      case 'diagnostics':
+      case 'InputSelect':
+        return handleBackToOverview
+      case 'SvgSelect':
+      case 'RasterSelect':
+        return handleBackToInputSelect
+      case 'ChooseRenderer':
+        return handleBackFromChooseRenderer
+      case 'DrawingPreview':
+        return handleBackFromDrawingPreview
+      case 'UploadProgress':
+        return () => {}
+      default:
+        return null
+    }
+  }
+  useBackButton(backAction())
 
   if (!state || view === 'loading') {
     return (
@@ -244,7 +275,7 @@ export function PlusApp() {
             setSelectedRenderer(r)
             setView('DrawingPreview')
           }}
-          onBack={() => setView(inputType === 'raster' ? 'RasterSelect' : 'SvgSelect')}
+          onBack={handleBackFromChooseRenderer}
         />
       )
       break
@@ -321,6 +352,7 @@ export function PlusApp() {
       {screen}
       <PlusSettingsModal
         isOpen={plusSettingsOpen}
+        drawing={duringDrawing}
         onClose={() => {
           setPlusSettingsOpen(false)
           refresh() // moving the belts or changing the pulley diameter forgets the belt position
