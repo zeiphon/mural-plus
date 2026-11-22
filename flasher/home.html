@@ -1,0 +1,111 @@
+<!doctype html>
+<!--
+  The Pages site's front page, linking to each installer. Filled in by
+  scripts/build_pages_site.py, which the release workflow runs.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mural Plus Installers</title>
+  <meta name="description" content="Install Mural Plus firmware on a Mural from your browser.">
+  <style>
+    :root {
+      --bg: #f6f5f2;
+      --surface: #ffffff;
+      --text: #1d1d1b;
+      --muted: #5f5e59;
+      --border: #dddbd4;
+      --accent: #2f5f9e;
+      --accent-text: #ffffff;
+      --warn-bg: #fdf3e1;
+      --warn-text: #7a4b00;
+      --code-bg: #efede8;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161615;
+        --surface: #20201e;
+        --text: #ecebe6;
+        --muted: #a3a29b;
+        --border: #3a3936;
+        --accent: #7aa7e6;
+        --accent-text: #0f1d30;
+        --warn-bg: #3a2c12;
+        --warn-text: #f3cf8a;
+        --code-bg: #2a2a27;
+        color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+    h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 4px; }
+    h2 { font-size: 1.15rem; margin: 40px 0 8px; }
+    h3 { font-size: 1.05rem; margin: 0 0 6px; }
+    p, ul, ol { margin: 0 0 12px; }
+    li { margin-bottom: 4px; }
+    a { color: var(--accent); }
+    .meta { color: var(--muted); margin-bottom: 24px; }
+    .notice {
+      background: var(--warn-bg); color: var(--warn-text);
+      border-radius: 8px; padding: 12px 14px; margin: 16px 0;
+    }
+    .choices { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; margin-top: 16px; }
+    @media (max-width: 620px) { .choices { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px; display: flex; flex-direction: column;
+    }
+    .card p { color: var(--muted); font-size: 0.95rem; }
+    .card .spacer { flex: 1; }
+    .btn {
+      appearance: none; border: 0; cursor: pointer; width: 100%;
+      background: var(--accent); color: var(--accent-text);
+      font: inherit; font-weight: 600; padding: 10px 14px; border-radius: 8px;
+    }
+    .btn.secondary { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+    .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    code, pre { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.88rem; }
+    code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+    pre {
+      background: var(--code-bg); padding: 12px 14px; border-radius: 8px;
+      overflow-x: auto; margin: 0 0 12px; white-space: pre;
+    }
+    footer { margin-top: 48px; color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Mural Plus</h1>
+  <div class="meta">Web installers &middot; <a href="{{REPO_URL}}">source</a></div>
+
+  <p>Firmware for Mural with a reworked setup, live drawing controls and a diagnostics page. Choose the installer for your Mural's hardware.</p>
+
+  <div class="choices">
+    <div class="card">
+      <h3>v2 hardware</h3>
+      <p>The FluidNC controller board, with an SD card and a small screen. Mural Plus {{V2_VERSION}}, with updates from the browser.</p>
+      <div class="spacer"></div>
+      <a class="btn" href="v2/" style="text-align:center;text-decoration:none">Mural Plus installer</a>
+    </div>
+    <div class="card">
+      <h3>v1.1 hardware</h3>
+      <p>A bare ESP32 board with two TMC2209 drivers and an MG90s servo. Mural 1 Plus {{V1_VERSION}}.</p>
+      <div class="spacer"></div>
+      <a class="btn secondary" href="v1/" style="text-align:center;text-decoration:none">Mural 1 Plus installer</a>
+    </div>
+  </div>
+
+  <footer>
+    Mural Plus is a fork of <a href="https://github.com/nikivanov/mural">nikivanov/mural</a>.
+  </footer>
+</main>
+</body>
+</html>

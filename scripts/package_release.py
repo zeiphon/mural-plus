@@ -267,7 +267,7 @@ If Mural already runs a version of {PRODUCT_NAME} that can update itself, downlo
 
 ## Installing over USB
 
-The easiest way is the web installer: https://{owner.lower()}.github.io/{name}/ (desktop Chrome or Edge, USB cable).
+The easiest way is the web installer: https://{owner.lower()}.github.io/{name}/v2/ (desktop Chrome or Edge, USB cable).
 
 To flash with [esptool](https://docs.espressif.com/projects/esptool/) instead:
 

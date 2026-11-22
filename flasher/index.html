@@ -89,7 +89,7 @@
   <h1>Mural Plus</h1>
   <div class="meta">Web installer &middot; version {{VERSION}} &middot; <a href="{{REPO_URL}}">source</a></div>
 
-  <p>Firmware for <strong>v2 Mural hardware</strong> (the FluidNC controller board, with an SD card and a small screen), with a reworked setup, live drawing controls, a diagnostics page and updates from the browser. It won't work on v1.1 boards.</p>
+  <p>Firmware for <strong>v2 Mural hardware</strong> (the FluidNC controller board, with an SD card and a small screen), with a reworked setup, live drawing controls, a diagnostics page and updates from the browser. It won't work on v1.1 boards: for those, use the <a href="../v1/">Mural 1 Plus installer</a>.</p>
   <p>Already running Mural Plus? You can update without a cable: download <code>{{UPDATE_BIN}}</code> from the <a href="{{REPO_URL}}/releases">releases page</a>, then in Mural open the settings (the gear, top right) and choose <strong>Install an update</strong> under <strong>Firmware</strong>.</p>
 
   <h2>Before you start</h2>
@@ -147,7 +147,7 @@
   <pre>esptool.py --chip esp32 write_flash {{USB_UPDATE_ARGS}}</pre>
 
   <footer>
-    Mural Plus is a fork of <a href="https://github.com/nikivanov/mural">nikivanov/mural</a>. Installer powered by <a href="https://esphome.github.io/esp-web-tools/">ESP Web Tools</a>.
+    Mural Plus is a fork of <a href="https://github.com/nikivanov/mural">nikivanov/mural</a>. Installer powered by <a href="https://esphome.github.io/esp-web-tools/">ESP Web Tools</a>. <a href="../">All installers</a>
   </footer>
 </main>
 </body>

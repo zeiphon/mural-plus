@@ -1,9 +1,16 @@
 name: Release
 
-# Pushing a tag like v2-plus.1 builds the firmware, creates a GitHub release with
-# the .bin files attached, and publishes the web installer to GitHub Pages.
-# Running it by hand (Actions tab > Release > Run workflow) only builds, and keeps the
-# files as a downloadable workflow artifact, which is handy for testing a build.
+# Pushing a tag like v2-plus.1:
+#   - builds the firmware and creates a GitHub release with the .bin files,
+#     including the -update.bin file for updating from the browser;
+#   - publishes the web installers to GitHub Pages: this one at /v2/, and the
+#     v1.1 installer at /v1/, rebuilt from the latest v1.1-plus* tag, so both
+#     stay online. The front page links to both (flasher/home.html).
+# Running it by hand (Actions tab > Release > Run workflow) only builds, and keeps
+# the files as a downloadable workflow artifact, which is handy for testing a build.
+#
+# A release from the v1.1-plus branch deploys only its own installer, replacing
+# this combined site. After one, re-run this workflow's latest tagged run.
 
 on:
   push:
@@ -12,7 +19,7 @@ on:
 
 permissions:
   contents: write   # create the release
-  pages: write      # deploy the installer
+  pages: write      # deploy the installers
   id-token: write   # required by deploy-pages
 
 concurrency:
@@ -63,12 +70,6 @@ jobs:
           name: firmware
           path: dist/
 
-      - name: Upload installer site
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist/site
-
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
@@ -78,9 +79,84 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
 
-  deploy:
+  # The v1.1 installer, built from the latest v1.1-plus release tag with that
+  # tag's own tooling, so the Pages site keeps it.
+  build-v1-installer:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check out the latest v1.1-plus release
+        run: |
+          tag=$(git tag -l 'v1.1-plus*' --sort=-v:refname | head -1)
+          if [ -z "$tag" ]; then echo "No v1.1-plus tag found"; exit 1; fi
+          echo "Building the v1.1 installer from $tag"
+          git checkout --quiet "$tag"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v6
+        with:
+          path: ~/.platformio
+          key: pio-v1-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO and esptool
+        run: pip install platformio esptool==4.9.0
+
+      - name: Install web worker dependencies
+        working-directory: tsc
+        run: npm install --ignore-scripts
+
+      - name: Build and package
+        run: python scripts/package_release.py
+
+      - name: Keep the installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: v1-installer
+          path: dist/site/
+
+  pages:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, build-v1-installer]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: firmware
+          path: v2-dist
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: v1-installer
+          path: v1-site
+
+      - name: Build the site
+        run: python scripts/build_pages_site.py v2-dist/site v1-site pages-site
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: pages-site
+
+  deploy:
+    needs: pages
     runs-on: ubuntu-latest
     environment:
       name: github-pages
