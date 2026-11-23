@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" width="200" height="160" fill="none" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- A sample drawing for the Mural demo: mountains, a sun and a lake -->
+  <path d="M 134 40 a 16 16 0 1 0 32 0 a 16 16 0 1 0 -32 0" />
+  <path d="M 150 14 L 150 8 M 168 22 L 173 18 M 176 40 L 182 40 M 132 22 L 127 18 M 124 40 L 118 40" />
+  <path d="M 8 118 L 58 46 L 82 80 L 112 34 L 160 104 L 176 92 L 194 118" />
+  <path d="M 48 60 L 58 64 L 66 57 M 102 48 L 112 53 L 122 48" />
+  <path d="M 8 118 L 194 118" />
+  <path d="M 20 128 Q 30 123 40 128 T 60 128 T 80 128 M 96 128 Q 106 123 116 128 T 136 128 T 156 128 T 176 128" />
+  <path d="M 36 138 Q 46 133 56 138 T 76 138 T 96 138 T 116 138 M 128 138 Q 138 133 148 138 T 168 138" />
+  <path d="M 56 148 Q 66 143 76 148 T 96 148 T 116 148 T 136 148" />
+  <path d="M 24 30 q 5 -5 10 0 q 5 -5 10 0 M 52 20 q 4 -4 8 0 q 4 -4 8 0" />
+</svg>

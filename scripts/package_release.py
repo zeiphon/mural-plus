@@ -1,6 +1,6 @@
 """Builds the firmware and web UI, then packages them for a GitHub release and the web flasher.
 
-    python scripts/package_release.py [--out dist] [--skip-build]
+    python scripts/package_release.py [--out dist] [--skip-build] [--skip-demo]
 
 Writes:
     dist/site/                  the web flasher (published to GitHub Pages by CI)
@@ -8,6 +8,7 @@ Writes:
         manifest-install.json   fresh install: full image, erases the device
         manifest-update.json    USB update: everything except NVS, keeps settings
         firmware/*.bin
+        demo/                   the web UI with a simulated Mural (ui/demo/)
     dist/release/*.bin          files to attach to the GitHub release, including
                                 the -update.bin file for updating from the browser
     dist/RELEASE_NOTES.md       installing and updating instructions
@@ -86,9 +87,20 @@ def esptool_cmd():
     sys.exit("esptool not found. Install it (pip install esptool) or build once with PlatformIO.")
 
 
-def run(cmd):
+def run(cmd, cwd=ROOT, env=None):
     print("+ " + " ".join(cmd), flush=True)
-    subprocess.run(cmd, cwd=ROOT, check=True)
+    subprocess.run(cmd, cwd=cwd, check=True, env=env)
+
+
+def build_demo(out_dir, version):
+    """Builds the web demo (ui/demo/) into out_dir. Needs the worker built (the firmware build does it)."""
+    npx = shutil.which("npx")
+    if not npx:
+        sys.exit("npx not found: install Node.js to build the web demo, or pass --skip-demo")
+    ui = ROOT / "ui"
+    env = dict(os.environ, MURAL_VERSION=version)
+    run([npx, "tsc", "-p", "demo"], cwd=ui)
+    run([npx, "vite", "build", "--config", "demo/vite.config.ts", "--outDir", str(out_dir), "--emptyOutDir"], cwd=ui, env=env)
 
 
 def partitions():
@@ -159,6 +171,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default="dist", help="output folder (default: dist)")
     ap.add_argument("--skip-build", action="store_true", help="package the existing build output")
+    ap.add_argument("--skip-demo", action="store_true", help="don't build the web demo")
     ap.add_argument("--metadata", help=argparse.SUPPRESS)  # used by scripts/package_target.py
     args = ap.parse_args()
 
@@ -260,6 +273,10 @@ def main():
                 .replace("{{UPDATE_BIN}}", names["update"])
                 .replace("{{USB_UPDATE_ARGS}}", usb_update_args))
     (site / "index.html").write_text(page, encoding="utf-8")
+
+    # The web demo, published with the installer as v2/demo/
+    if not args.skip_demo:
+        build_demo(site / "demo", version)
 
     notes = f"""## Updating from the browser
 

@@ -14,6 +14,7 @@ Reviewed up to: `1eceffa1f14c30d761a06b45510a966253782e82` (2026-11-21, "Add Dis
 3. For each change, add a row to the port backlog below, or note that plus doesn't need it.
 4. Update "Reviewed up to" to the upstream commit you merged.
 5. Build, and smoke-test classic mode (boot, set distance, upload a drawing).
+6. If a change touched classic mode's routes or phases (`src/main.cpp`, `src/phases/`), the command-file format, or `ui/src/api.ts`, update the web demo's simulated Mural to match (`ui/demo/src/device/device.ts`), then check it still type-checks: `npx tsc -p demo` in `ui/`. The same applies when plus's own routes change (`src/plus/`).
 
 The watched files are listed in `scripts/upstream_watch.py`. They are upstream files that plus mode has its own version of (setup phases and routes, runner, pen, UI flow and setup screens), plus files whose behaviour plus relies on: the command-file format in `worker/src/toCommands.ts`, and the backend contract in `ui/src/api.ts` and `ui/src/types.ts`. Changes to shared code that plus uses directly show up as build errors instead.
 
