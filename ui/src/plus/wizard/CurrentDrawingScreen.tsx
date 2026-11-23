@@ -10,8 +10,7 @@ export function CurrentDrawingScreen(props: { state: PlusState; onUse: () => voi
       <div className="rounded-xl bg-gray-800 border border-gray-700 px-4 py-4 space-y-1">
         <p className="text-base font-semibold text-white">Current drawing</p>
         <p className="text-sm text-gray-400">
-          Made for a {file.topDistance} mm hanger distance. Mural keeps the drawing, not the picture it came from, so
-          there's no preview.
+          Made for a {file.topDistance} mm hanger distance. Preview unavailable for saved drawings.
         </p>
       </div>
       <Button onClick={props.onUse}>Use this drawing</Button>

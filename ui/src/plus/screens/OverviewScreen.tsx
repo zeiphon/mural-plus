@@ -105,7 +105,7 @@ export function OverviewScreen({ state, onOpen, onStarted, onStateChange, onOpen
   ]
 
   return (
-    <Card title="Mural" subtitle="Do these steps in any order, and redo any of them at any time.">
+    <Card title="Mural" subtitle="Complete the steps to start drawing.">
       <div className="space-y-3">
         {steps.map((step, i) => (
           <div key={step.id} className="flex gap-2">

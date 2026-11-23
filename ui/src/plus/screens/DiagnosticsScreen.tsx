@@ -104,7 +104,7 @@ export function DiagnosticsScreen({ onSwitchToClassic }: { onSwitchToClassic: ()
       <LogSection log={log} autoLog={autoLog} onAutoLog={setAutoLog} onRefresh={() => getLog().then(setLog).catch(() => {})} />
       <Section title="Classic Mural">
         <p className="text-sm text-gray-400">
-          Upstream Mural's original interface, as a fallback or for comparing. Mural restarts, and you'll need to set it
+          Regular Mural's original interface, as a fallback or for comparing. Mural restarts, and you'll need to set it
           up again.
         </p>
         <SmallButton onClick={onSwitchToClassic} disabled={!diag || diag.system.drawing}>

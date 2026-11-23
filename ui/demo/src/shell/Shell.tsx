@@ -46,7 +46,7 @@ export function Shell({ device }: { device: Device }) {
             Mural Plus demo <span className="text-xs font-normal text-gray-500">{FIRMWARE_VERSION}</span>
           </h1>
           <p className="text-xs sm:text-sm text-gray-400 truncate">
-            Mural's real web page, talking to a simulated Mural. Nothing here moves a real one.
+            Mural's real web UI, talking to a simulated Mural.
           </p>
         </div>
         <nav className="ml-auto flex shrink-0 gap-4 text-sm text-gray-400">

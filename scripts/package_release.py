@@ -288,7 +288,7 @@ The easiest way is the web installer: {INSTALLER_URL} (desktop Chrome or Edge, U
 
 To flash with [esptool](https://docs.espressif.com/projects/esptool/) instead:
 
-**Fresh install.** This erases settings and calibration. Use it on a new board, a board coming from upstream Mural, or if you're unsure.
+**Fresh install.** This erases settings and calibration. Use it on a new board, a board coming from regular Mural, or if you're unsure.
 ```
 esptool.py --chip {CHIP} write_flash 0x0 {names['full']}
 ```

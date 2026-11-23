@@ -160,7 +160,7 @@ export function PlusSettings(props: {
               />
               <Help label="What happens if it's off">
                 <p>
-                  Mural stops its web server during a drawing, like upstream Mural, and the page reconnects when the
+                  Mural stops its web server during a drawing, like regular Mural, and the page reconnects when the
                   drawing ends.
                 </p>
               </Help>
@@ -192,7 +192,6 @@ export function PlusSettings(props: {
           {props.ui === 'basic'
             ? 'Basic goes through the setup one step at a time.'
             : 'Advanced shows every setup step on one page, to do in any order.'}{' '}
-          This browser remembers the choice.
         </p>
       </Section>
     </div>
