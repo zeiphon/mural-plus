@@ -50,3 +50,36 @@ export function useMedia(query: string) {
   }, [query])
   return matches
 }
+
+/**
+ * The height of the part of the page that's on screen, following the mobile
+ * browser's toolbars, while `enabled`. 100dvh should be that, but isn't always:
+ * Firefox for Android with its address bar at the bottom puts the bar over the
+ * bottom of it. Null until measured (or when disabled), so CSS can fall back.
+ */
+export function useVisibleHeight(enabled: boolean): number | null {
+  const [height, setHeight] = useState<number | null>(null)
+  useEffect(() => {
+    if (!enabled) {
+      setHeight(null)
+      return
+    }
+    const vv = window.visualViewport
+    const update = () => {
+      // Zoomed in: the layout shouldn't follow the zoom
+      if (vv && vv.scale > 1.01) return
+      const visible = vv ? Math.min(window.innerHeight, vv.height) : window.innerHeight
+      // The on-screen keyboard: leave the page as it is, as the browser expects
+      if (window.innerHeight - visible > 150) return
+      setHeight(Math.round(visible))
+    }
+    update()
+    vv?.addEventListener('resize', update)
+    window.addEventListener('resize', update)
+    return () => {
+      vv?.removeEventListener('resize', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [enabled])
+  return height
+}

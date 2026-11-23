@@ -472,33 +472,47 @@ export function PlusApp() {
     </p>
   )
 
-  return (
-    <Page footer={footer}>
-      {(view === 'diagnostics' || (!basic && settled && view !== 'overview')) && (
+  const showBack = view === 'diagnostics' || (!basic && settled && view !== 'overview')
+  const showGear = settled || duringDrawing
+  const corners = (showBack || showGear) && (
+    <>
+      {showBack && (
         <button
           onClick={handleBackToOverview}
-          className="fixed top-4 left-4 text-sm text-gray-400 hover:text-gray-200 transition-colors z-10"
+          className="absolute top-4 left-4 text-sm text-gray-400 hover:text-gray-200 transition-colors z-10"
         >
           {view === 'diagnostics' ? '← Back' : '← Overview'}
         </button>
       )}
-      {(settled || duringDrawing) && (
+      {showGear && (
         <button
           onClick={() => setPlusSettingsOpen(true)}
-          className="fixed top-4 right-4 text-gray-400 hover:text-gray-200 transition-colors text-2xl leading-none z-10"
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-200 transition-colors text-2xl leading-none z-10"
           aria-label="Open settings"
         >
           ⚙
         </button>
       )}
-      {wizardStep ? (
-        <div className="space-y-4 sm:space-y-6">
+    </>
+  )
+
+  return (
+    <Page
+      footer={footer}
+      corners={corners || undefined}
+      top={
+        wizardStep && (
           <StepBar
             state={state}
             current={wizardStep}
             locked={view === 'UploadProgress'}
             onSelect={(step) => go(stepView(step, state))}
           />
+        )
+      }
+    >
+      {wizardStep ? (
+        <div className="space-y-4 sm:space-y-6">
           {screen}
           {showWizardNav && (
             <WizardNav

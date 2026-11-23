@@ -7,7 +7,7 @@ import { Status } from './Status'
 import { Controls } from './Controls'
 import { Logs } from './Logs'
 import { Dot, Strip, useActivity } from './Strip'
-import { useMedia } from './hooks'
+import { useMedia, useVisibleHeight } from './hooks'
 
 // The demo page: Mural's web UI (app.html, in an iframe, as on a phone) and a
 // panel showing what the simulated Mural is doing. On narrow screens they're
@@ -24,6 +24,7 @@ export function Shell({ device }: { device: Device }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const wide = useMedia('(min-width: 1024px)')
   const active = useActivity(device)
+  const visibleHeight = useVisibleHeight(!wide)
 
   function reset() {
     if (!confirm('Reset the demo? The simulated Mural starts again as new, and the page forgets your choices.')) return
@@ -39,7 +40,10 @@ export function Shell({ device }: { device: Device }) {
   }
 
   return (
-    <div className="flex flex-col h-dvh lg:h-auto lg:min-h-screen bg-gray-950 text-gray-100">
+    <div
+      className="flex flex-col h-dvh lg:h-auto lg:min-h-screen bg-gray-950 text-gray-100"
+      style={visibleHeight ? { height: visibleHeight } : undefined}
+    >
       <header className="flex items-center gap-4 border-b border-gray-800 px-4 py-3 lg:px-6">
         <div className="min-w-0">
           <h1 className="text-base sm:text-lg font-semibold">
