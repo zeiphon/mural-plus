@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import type { Device } from '../device/device'
 import type { Motor } from '../device/movement'
+import type { Pen } from '../device/pen'
 import { useFrame } from './hooks'
 
 // The two stepper motors and the pen servo, close up. They're updated straight
@@ -23,6 +24,17 @@ function motorState(motor: Motor, boosted: boolean): { label: string; tone: stri
   return { label: boosted ? `${dir} fast` : dir, tone: 'text-cyan-300' }
 }
 
+/** How far a motor has turned, in degrees, as seen from the front (shaking when stalled). */
+function motorDegrees(device: Device, side: 'left' | 'right') {
+  const motor = side === 'left' ? device.movement.left : device.movement.right
+  const sign = side === 'left' ? 1 : -1
+  return sign * (motor.steps / 1600) * 360 + (motor.stalled ? (Math.random() - 0.5) * 10 : 0)
+}
+
+function motorColor(motor: Motor, idle: string) {
+  return motor.stalled ? '#f87171' : Math.abs(motor.speed) > 1 ? '#22d3ee' : idle
+}
+
 function MotorDial({ device, side }: { device: Device; side: 'left' | 'right' }) {
   const rotor = useRef<SVGGElement>(null)
   const ring = useRef<SVGCircleElement>(null)
@@ -30,13 +42,9 @@ function MotorDial({ device, side }: { device: Device; side: 'left' | 'right' })
   const detail = useRef<HTMLParagraphElement>(null)
 
   useFrame(() => {
-    const m = device.movement
-    const motor = side === 'left' ? m.left : m.right
-    const sign = side === 'left' ? 1 : -1
-    const degrees = sign * (motor.steps / 1600) * 360 + (motor.stalled ? (Math.random() - 0.5) * 10 : 0)
-    rotor.current?.setAttribute('transform', `rotate(${degrees.toFixed(1)} 50 50)`)
-    const active = Math.abs(motor.speed) > 1
-    ring.current?.setAttribute('stroke', motor.stalled ? '#f87171' : active ? '#22d3ee' : '#374151')
+    const motor = side === 'left' ? device.movement.left : device.movement.right
+    rotor.current?.setAttribute('transform', `rotate(${motorDegrees(device, side).toFixed(1)} 50 50)`)
+    ring.current?.setAttribute('stroke', motorColor(motor, '#374151'))
     const boosted = side === 'left' ? device.leftBoosted : device.rightBoosted
     const { label: text, tone } = motorState(motor, boosted)
     if (label.current && label.current.textContent !== text) {
@@ -76,6 +84,48 @@ function MotorDial({ device, side }: { device: Device; side: 'left' | 'right' })
       <p ref={detail} className="text-[11px] text-gray-500 tabular-nums" />
     </div>
   )
+}
+
+/** A small motor for the strip under the app on phones. */
+export function MiniMotor({ device, side }: { device: Device; side: 'left' | 'right' }) {
+  const rotor = useRef<SVGGElement>(null)
+  const ring = useRef<SVGCircleElement>(null)
+
+  useFrame(() => {
+    const motor = side === 'left' ? device.movement.left : device.movement.right
+    rotor.current?.setAttribute('transform', `rotate(${motorDegrees(device, side).toFixed(1)} 50 50)`)
+    ring.current?.setAttribute('stroke', motorColor(motor, '#4b5563'))
+  })
+
+  return (
+    <svg viewBox="0 0 100 100" className="w-7 h-7 shrink-0" aria-hidden="true">
+      <circle cx="50" cy="50" r="42" fill="#111827" stroke="#4b5563" strokeWidth="10" ref={ring} />
+      <g ref={rotor}>
+        {[0, 120, 240].map((a) => (
+          <line
+            key={a}
+            x1="50"
+            y1="50"
+            x2={50 + 28 * Math.cos((a * Math.PI) / 180)}
+            y2={50 + 28 * Math.sin((a * Math.PI) / 180)}
+            stroke={a === 0 ? '#e5e7eb' : '#6b7280'}
+            strokeWidth={a === 0 ? 12 : 8}
+            strokeLinecap="round"
+          />
+        ))}
+      </g>
+    </svg>
+  )
+}
+
+/** What the pen is doing, in words. */
+export function penState(pen: Pen): { text: string; tone: string } {
+  if (!pen.attached) return { text: pen.positionKnown ? 'Released' : 'Waiting for boot', tone: 'text-gray-500' }
+  if (pen.busy) {
+    return { text: pen.position === 'down' ? 'Lowering' : pen.position === 'up' ? 'Lifting' : 'Moving', tone: 'text-cyan-300' }
+  }
+  if (pen.position === 'down') return { text: 'On the wall', tone: 'text-amber-300' }
+  return { text: pen.position === 'up' ? 'Up' : 'Held', tone: 'text-gray-500' }
 }
 
 /** A point on the gauge for a servo angle: 0° on the right, 180° on the left. */
@@ -124,17 +174,7 @@ function ServoGauge({ device }: { device: Device }) {
     mark(upMark.current, s.upAngle)
     mark(downMark.current, s.downAngle)
 
-    let text: string
-    let tone = 'text-gray-500'
-    if (!pen.attached) text = pen.positionKnown ? 'Released' : 'Waiting for boot'
-    else if (pen.busy) {
-      text = pen.position === 'down' ? 'Lowering' : pen.position === 'up' ? 'Lifting' : 'Moving'
-      tone = 'text-cyan-300'
-    } else if (pen.position === 'down') {
-      text = 'On the wall'
-      tone = 'text-amber-300'
-    } else if (pen.position === 'up') text = 'Up'
-    else text = 'Held'
+    const { text, tone } = penState(pen)
     if (label.current && label.current.textContent !== text) {
       label.current.textContent = text
       label.current.className = `text-xs font-medium ${tone}`

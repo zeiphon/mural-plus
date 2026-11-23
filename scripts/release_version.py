@@ -1,9 +1,11 @@
 """Works out the firmware version from git, for the build (and later the release packager).
 
-Release tags look like v2-plus.1. On a tagged commit the version is "2-plus.1";
-later commits get git's suffix ("2-plus.1-3-gabc1234"), and uncommitted changes add
-"-dirty". With no release tag yet it's "dev-<commit>". Only v2-plus tags count, so
-upstream's tags (v1.1, ...) and the v1.1-plus fork's tags are ignored.
+Release tags look like v2-plus.2, or v2-plus.2.1 for a minor release (smaller
+changes on top of v2-plus.2). On a tagged commit the version is the tag without
+the "v" ("2-plus.2.1"); later commits get git's suffix ("2-plus.2.1-3-gabc1234"),
+and uncommitted changes add "-dirty". With no release tag yet it's "dev-<commit>".
+Only v2-plus tags count, so upstream's tags (v1.1, ...) and the v1.1-plus fork's
+tags are ignored.
 """
 import subprocess
 

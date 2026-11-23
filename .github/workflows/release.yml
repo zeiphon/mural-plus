@@ -1,6 +1,6 @@
 name: Release
 
-# Pushing a tag like v2-plus.1:
+# Pushing a tag like v2-plus.2, or v2-plus.2.1 for a minor release:
 #   - builds the firmware and creates a GitHub release with the .bin files,
 #     including the -update.bin file for updating from the browser;
 #   - publishes the web installer to the installer site (zeiphon/mural-plus-installer)
@@ -23,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_tag:
-        description: "Tag to publish again (for example v2-plus.1). Leave empty to only build."
+        description: "Tag to publish again (for example v2-plus.2.1). Leave empty to only build."
         required: false
         default: ""
 

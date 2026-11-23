@@ -4,7 +4,7 @@ import { formatBytes, formatDuration, useTick } from './hooks'
 
 // What the simulated Mural knows about itself, in words.
 
-const OFFLINE: Record<string, string> = {
+export const OFFLINE: Record<string, string> = {
   restarting: 'Restarting…',
   wifi: 'WiFi lost',
   drawing: 'Web server off while drawing',

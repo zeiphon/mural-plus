@@ -6,10 +6,13 @@ import { Mechanics } from './Mechanics'
 import { Status } from './Status'
 import { Controls } from './Controls'
 import { Logs } from './Logs'
+import { Dot, Strip, useActivity } from './Strip'
+import { useMedia } from './hooks'
 
 // The demo page: Mural's web UI (app.html, in an iframe, as on a phone) and a
 // panel showing what the simulated Mural is doing. On narrow screens they're
-// two tabs. The iframe stays mounted either way, so switching never reloads it.
+// two tabs, with a strip under the app showing the simulated Mural at a
+// glance. The iframe stays mounted either way, so switching never reloads it.
 
 const SOURCE_URL = 'https://github.com/zeiphon/mural-plus'
 
@@ -19,6 +22,8 @@ const APP_KEYS = ['muralUi', 'muralSpeed', 'muralPenWidthMm']
 export function Shell({ device }: { device: Device }) {
   const [tab, setTab] = useState<'app' | 'device'>('app')
   const frame = useRef<HTMLIFrameElement>(null)
+  const wide = useMedia('(min-width: 1024px)')
+  const active = useActivity(device)
 
   function reset() {
     if (!confirm('Reset the demo? The simulated Mural starts again as new, and the page forgets your choices.')) return
@@ -58,7 +63,13 @@ export function Shell({ device }: { device: Device }) {
         {(
           [
             ['app', 'Mural’s web page'],
-            ['device', 'The simulated Mural'],
+            [
+              'device',
+              <>
+                <span className="hidden min-[360px]:inline">The simulated Mural</span>
+                <span className="min-[360px]:hidden">Simulated Mural</span>
+              </>,
+            ],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -66,11 +77,12 @@ export function Shell({ device }: { device: Device }) {
             role="tab"
             aria-selected={tab === id}
             onClick={() => setTab(id)}
-            className={`flex-1 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+            className={`flex-1 inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 min-[360px]:px-3 py-1.5 text-sm transition-colors ${
               tab === id ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-gray-200'
             }`}
           >
             {label}
+            {id === 'device' && tab === 'app' && <Dot active={active} />}
           </button>
         ))}
       </div>
@@ -82,6 +94,7 @@ export function Shell({ device }: { device: Device }) {
           <div className="flex-1 min-h-0 overflow-hidden lg:rounded-[2rem] lg:border-[6px] lg:border-gray-800 bg-gray-950">
             <iframe ref={frame} src="./app.html" title="Mural's web page" className="block w-full h-full" />
           </div>
+          {!wide && <Strip device={device} active={active} onOpen={() => setTab('device')} />}
           <p className="hidden lg:block mt-2 text-center text-xs text-gray-500">
             Mural's own web page, as it looks on a phone
           </p>

@@ -38,24 +38,31 @@ interface View {
   scale: number
   width: number
   height: number
+  /** A thumbnail: no labels, a smaller bot */
+  compact: boolean
 }
 
 /** Fits the wall into the width, and into at most `maxHeight` px, centred. */
-function makeView(width: number, maxHeight: number, d: number, drawingHeight: number): View {
+function makeView(width: number, maxHeight: number, d: number, drawingHeight: number, compact: boolean): View {
   const homeY = imageToFrame(homePoint(d), d).y
   const yMax = Math.max(0.85 * d, SAFE_Y_FRACTION * d + drawingHeight + 0.06 * d, homeY + 0.12 * d)
   const y0 = -0.06 * d
   const scale = Math.min(width / (1.08 * d), maxHeight / (yMax - y0))
   const x0 = d / 2 - width / scale / 2
-  return { d, x0, y0, scale, width, height: Math.round((yMax - y0) * scale) }
+  return { d, x0, y0, scale, width, height: Math.round((yMax - y0) * scale), compact }
 }
 
 /** How much bigger than life the bot is drawn, so it stays visible on a large wall. */
 function botSize(v: View) {
-  return v.scale * Math.max(1, 34 / (BOT.halfWidth * 2 * v.scale))
+  return v.scale * Math.max(1, (v.compact ? 14 : 34) / (BOT.halfWidth * 2 * v.scale))
 }
 
-export function WallView({ device }: { device: Device }) {
+/**
+ * `height` makes a thumbnail of at most that many pixels: no labels or caption,
+ * for the strip under the app on phones.
+ */
+export function WallView({ device, height }: { device: Device; height?: number }) {
+  const compact = height !== undefined
   const wrap = useRef<HTMLDivElement>(null)
   const base = useRef<HTMLCanvasElement>(null)
   const top = useRef<HTMLCanvasElement>(null)
@@ -66,15 +73,16 @@ export function WallView({ device }: { device: Device }) {
   useEffect(() => {
     const el = wrap.current
     if (!el) return
-    const ro = new ResizeObserver(() => setWidth(Math.max(240, Math.floor(el.clientWidth))))
+    const ro = new ResizeObserver(() => setWidth(Math.max(compact ? 24 : 240, Math.floor(el.clientWidth))))
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [compact])
 
   useFrame(() => {
     const d = device.wallDistance
     const h = device.drawingHeight()
-    const view = makeView(width, Math.max(260, Math.min(560, window.innerHeight * 0.55)), d, h)
+    const maxHeight = height ?? Math.max(260, Math.min(560, window.innerHeight * 0.55))
+    const view = makeView(width, maxHeight, d, h, compact)
     const dpr = window.devicePixelRatio || 1
     for (const c of [base.current, top.current]) {
       if (!c) return
@@ -85,7 +93,7 @@ export function WallView({ device }: { device: Device }) {
         drawn.current.key = ''
       }
     }
-    const key = `${width}|${d}|${h}|${device.planVersion}|${device.movement.topDistance}`
+    const key = `${width}|${maxHeight}|${d}|${h}|${device.planVersion}|${device.movement.topDistance}`
     const bctx = base.current!.getContext('2d')!
     if (drawn.current.key !== key || drawn.current.epoch !== device.trailEpoch) {
       drawn.current = { key, epoch: device.trailEpoch, stroke: 0, point: 0 }
@@ -104,9 +112,9 @@ export function WallView({ device }: { device: Device }) {
 
   return (
     <div ref={wrap} className="relative w-full">
-      <canvas ref={base} className="block w-full rounded-xl" />
+      <canvas ref={base} className={`block w-full ${compact ? 'rounded-md' : 'rounded-xl'}`} />
       <canvas ref={top} className="absolute inset-0 block w-full" />
-      {caption && (
+      {caption && !compact && (
         <p className="absolute bottom-2 left-0 right-0 text-center text-xs text-gray-400 pointer-events-none">
           {caption}
         </p>
@@ -132,7 +140,7 @@ function drawWall(ctx: CanvasRenderingContext2D, v: View, device: Device, drawin
   ctx.fillStyle = COLORS.pins
   for (const x of [0, d]) {
     ctx.beginPath()
-    ctx.arc(sx(v, x), pinY, 4, 0, Math.PI * 2)
+    ctx.arc(sx(v, x), pinY, v.compact ? 1.5 : 4, 0, Math.PI * 2)
     ctx.fill()
   }
   ctx.strokeStyle = COLORS.area
@@ -145,11 +153,13 @@ function drawWall(ctx: CanvasRenderingContext2D, v: View, device: Device, drawin
   ctx.fillStyle = COLORS.text
   ctx.font = '12px system-ui, sans-serif'
   ctx.textAlign = 'center'
-  ctx.fillText(
-    device.movement.topDistance > 0 ? `${d} mm between the pins` : 'Hanger distance not set yet',
-    sx(v, d / 2),
-    pinY - 8,
-  )
+  if (!v.compact) {
+    ctx.fillText(
+      device.movement.topDistance > 0 ? `${d} mm between the pins` : 'Hanger distance not set yet',
+      sx(v, d / 2),
+      pinY - 8,
+    )
+  }
 
   // The drawing area
   const ax = SAFE_X_FRACTION * d
@@ -158,11 +168,11 @@ function drawWall(ctx: CanvasRenderingContext2D, v: View, device: Device, drawin
   const ah = drawingHeight > 0 ? drawingHeight : v.height / v.scale + v.y0 - ay - 0.04 * d
   ctx.strokeStyle = COLORS.area
   ctx.setLineDash([6, 6])
-  ctx.strokeRect(sx(v, ax), sy(v, ay), aw * v.scale, ah * v.scale)
+  if (!v.compact) ctx.strokeRect(sx(v, ax), sy(v, ay), aw * v.scale, ah * v.scale)
   ctx.setLineDash([])
 
   // Home
-  if (device.movement.topDistance > 0) {
+  if (device.movement.topDistance > 0 && !v.compact) {
     const home = frameOf(homePoint(d), d)
     ctx.strokeStyle = COLORS.home
     ctx.lineWidth = 1.5
@@ -244,7 +254,7 @@ function drawBot(ctx: CanvasRenderingContext2D, v: View, device: Device): string
     cy = sy(v, hanging.y)
   } else {
     cx = v.width / 2
-    cy = v.height - 40 - BOT.bottom * mm
+    cy = v.compact ? v.height * 0.7 : v.height - 40 - BOT.bottom * mm
     caption = 'Not hanging from the pins: the belts are too short to reach'
   }
   if (offline === 'restarting') caption = 'Restarting…'
