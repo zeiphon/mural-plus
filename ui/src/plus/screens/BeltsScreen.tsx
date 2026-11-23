@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Card } from '../../components/Card'
 import { Button } from '../../components/Button'
-import { Toggle } from '../../components/Toggle'
 import { showAlert } from '../../components/AlertModal'
 import { leftRetractDown, leftStop, rightRetractDown, rightStop } from '../../api'
-import { extendToHome, getPlusState, retractBoost, delay, errorMessage } from '../api'
-import type { PlusState } from '../types'
+import { extendToHome, getDiagnostics, getPlusState, retractBoost, delay, errorMessage } from '../api'
+import type { Diagnostics, PlusState } from '../types'
 import { Help } from '../components/Help'
+import { MotorButton, Pulley } from '../components/MotorButton'
 
 interface Props {
   state: PlusState
@@ -50,20 +50,13 @@ export function BeltsScreen({ state, onDone }: Props) {
   // loses focus or is hidden, for example when the phone locks.
   useEffect(() => {
     if (!leftOn && !rightOn) return
-    const stopAll = () => {
-      stopBoost()
-      setLeftOn(false)
-      setRightOn(false)
-      leftStop().catch(() => {})
-      rightStop().catch(() => {})
-    }
     const onVisibility = () => {
-      if (document.hidden) stopAll()
+      if (document.hidden) stopRetracting()
     }
-    window.addEventListener('blur', stopAll)
+    window.addEventListener('blur', stopRetracting)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
-      window.removeEventListener('blur', stopAll)
+      window.removeEventListener('blur', stopRetracting)
       document.removeEventListener('visibilitychange', onVisibility)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,6 +91,15 @@ export function BeltsScreen({ state, onDone }: Props) {
     setBoosting(false)
     // After any request still on its way, so that one can't renew the boost
     ;(boostInFlight.current ?? Promise.resolve()).then(() => retractBoost(false)).catch(() => {})
+  }
+
+  /** Stops both belts and the boost. */
+  function stopRetracting() {
+    stopBoost()
+    setLeftOn(false)
+    setRightOn(false)
+    leftStop().catch(() => {})
+    rightStop().catch(() => {})
   }
 
   function handleLeft(on: boolean) {
@@ -145,23 +147,26 @@ export function BeltsScreen({ state, onDone }: Props) {
   return (
     <Card
       title="Belts"
-      subtitle="Place the belt loops on the homing screws and retract the belts until the motors stall. Don't let the motors stall for too long. Then extend the belts to their home position."
+      subtitle="Hook the belt loops onto the homing screws, retract each belt until its motor stalls, then extend to home. Don't let them stall too long."
     >
       {extending ? (
-        <div className="flex flex-col items-center gap-4 py-4">
-          <div className="w-10 h-10 border-4 border-gray-700 border-t-cyan-500 rounded-full animate-spin" />
-          <p className="text-sm text-gray-400">Extending to home position…</p>
-        </div>
+        <Extending />
       ) : (
         <>
           {state.ready.position && (
-            <p className="text-sm text-gray-400">
-              The belt position is already known. Only redo this if the belts have slipped or been moved.
+            <p className="flex gap-2 rounded-lg border border-emerald-800/60 bg-emerald-950/50 px-3 py-2 text-xs sm:text-sm text-emerald-200">
+              <span aria-hidden="true">✓</span>
+              <span>Belt position already known. Only redo this if the belts slipped or were moved.</span>
             </p>
           )}
-          <div className="space-y-4">
-            <Toggle label="Retract left belt" checked={leftOn} onChange={handleLeft} />
-            <Toggle label="Retract right belt" checked={rightOn} onChange={handleRight} />
+          <div className="grid grid-cols-2 gap-3">
+            <MotorButton side="left" running={leftOn} fast={boosting} onChange={handleLeft} />
+            <MotorButton side="right" running={rightOn} fast={boosting} onChange={handleRight} />
+          </div>
+          <div className="space-y-1">
+            <Button variant="danger" onClick={stopRetracting} disabled={!leftOn && !rightOn}>
+              Stop
+            </Button>
           </div>
           <div className="space-y-1">
             <button
@@ -195,17 +200,105 @@ export function BeltsScreen({ state, onDone }: Props) {
             </button>
             <Help label="Let go before the loops reach the screws">
               <p>For long retractions. Letting go early means the motors stall at the normal speed.</p>
-              <p>The belts stop if you leave this page or lock the phone.</p>
             </Help>
           </div>
-          <p className="text-xs text-gray-500">
-            Make sure the belts are unobstructed and the motors don't skip while extending, or the drawing accuracy may
-            be affected.
-          </p>
-          <Button onClick={handleExtend}>Belts are retracted, extend to home</Button>
+          <div className="space-y-1 border-t border-gray-800 pt-5 sm:pt-6">
+            <Button onClick={handleExtend}>Belts are retracted, extend to home</Button>
+            <p className="text-xs text-gray-500 text-center">
+              Keep the belts clear while they extend. If a motor skips, drawings come out inaccurate.
+            </p>
+          </div>
         </>
       )}
     </Card>
+  )
+}
+
+interface BeltProgress {
+  /** Belt lengths in mm: now, and at the home position */
+  length: number
+  target: number
+}
+
+/** Each belt's length and target while extending, from the motors' step counts. */
+function beltProgress(d: Diagnostics): { left: BeltProgress; right: BeltProgress; secondsLeft: number } | null {
+  const left = d.drivers.find((m) => m.name === 'Left')
+  const right = d.drivers.find((m) => m.name === 'Right')
+  if (!left || !right) return null
+  // Movement::setOrigin counts steps from the belt's zero length, so the step
+  // count is the belt's length, and the move ends at steps + stepsToGo.
+  const stepsPerRotation = (left.expectedMicrosteps ?? 8) * 200
+  const mmPerStep = (Math.PI * d.motors.pulleyDiameter) / stepsPerRotation
+  const belt = (m: typeof left): BeltProgress => ({
+    length: Math.abs(m.steps) * mmPerStep,
+    target: Math.abs(m.steps + m.stepsToGo) * mmPerStep,
+  })
+  const secondsLeft = Math.max(
+    ...[left, right].map((m) => (m.stepsToGo !== 0 && m.stepSpeed !== 0 ? Math.abs(m.stepsToGo / m.stepSpeed) : 0)),
+  )
+  return { left: belt(left), right: belt(right), secondsLeft }
+}
+
+function formatSecondsLeft(s: number) {
+  if (s < 1) return 'almost there'
+  if (s < 60) return `about ${Math.ceil(s)} s left`
+  return `about ${Math.ceil(s / 60)} min left`
+}
+
+/** While the belts extend to home: both pulleys letting their belts out, and how far they've got. */
+function Extending() {
+  const [progress, setProgress] = useState<ReturnType<typeof beltProgress>>(null)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      while (alive) {
+        try {
+          const d = await getDiagnostics()
+          if (alive) setProgress(beltProgress(d))
+        } catch {
+          // keep the last reading
+        }
+        await delay(1000)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        {(['left', 'right'] as const).map((side) => {
+          const belt = progress?.[side]
+          const done = belt ? belt.target - belt.length < 1 : false
+          const fraction = belt && belt.target > 0 ? Math.min(1, belt.length / belt.target) : 0
+          return (
+            <div
+              key={side}
+              className="flex flex-col items-center gap-2 rounded-xl border border-cyan-500/60 bg-cyan-950/40 px-3 py-4 sm:py-5 text-center text-cyan-100"
+            >
+              <Pulley side={side} turning={done ? undefined : 'out'} />
+              <span className="font-medium text-sm sm:text-base">{side === 'left' ? 'Left belt' : 'Right belt'}</span>
+              <span className="text-xs text-cyan-300 tabular-nums">
+                {belt ? `${Math.round(belt.length)} of ${Math.round(belt.target)} mm` : 'Extending…'}
+              </span>
+              <div className="w-full h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-cyan-500 transition-[width] duration-1000 ease-linear"
+                  style={{ width: `${fraction * 100}%` }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-sm text-gray-400 text-center">
+        Extending to the home position
+        {progress && progress.secondsLeft > 0 ? `, ${formatSecondsLeft(progress.secondsLeft)}` : '…'}
+      </p>
+    </div>
   )
 }
 

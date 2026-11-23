@@ -24,10 +24,16 @@ function motorState(motor: Motor, boosted: boolean): { label: string; tone: stri
   return { label: boosted ? `${dir} fast` : dir, tone: 'text-cyan-300' }
 }
 
-/** How far a motor has turned, in degrees, as seen from the front (shaking when stalled). */
+/**
+ * How far a motor has turned, in degrees clockwise as seen from the front
+ * (shaking when stalled). The belts leave the pulleys' top inner sides
+ * (KinematicModel.md), so retracting turns the left one clockwise and the
+ * right one anticlockwise, as in the app's Belts step.
+ */
 function motorDegrees(device: Device, side: 'left' | 'right') {
   const motor = side === 'left' ? device.movement.left : device.movement.right
-  const sign = side === 'left' ? 1 : -1
+  // Steps count up as the belt extends
+  const sign = side === 'left' ? -1 : 1
   return sign * (motor.steps / 1600) * 360 + (motor.stalled ? (Math.random() - 0.5) * 10 : 0)
 }
 

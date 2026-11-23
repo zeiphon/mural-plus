@@ -263,21 +263,6 @@ function drawBot(ctx: CanvasRenderingContext2D, v: View, device: Device): string
   const left = pulley(-1)
   const right = pulley(1)
 
-  // Belts
-  if (hanging) {
-    ctx.lineWidth = 2
-    for (const [pin, p, motor] of [
-      [0, left, m.left],
-      [d, right, m.right],
-    ] as const) {
-      ctx.strokeStyle = Math.abs(motor.speed) > 1 ? COLORS.beltActive : COLORS.belt
-      ctx.beginPath()
-      ctx.moveTo(sx(v, pin), sy(v, 0))
-      ctx.lineTo(p.x, p.y)
-      ctx.stroke()
-    }
-  }
-
   // Body
   ctx.globalAlpha = hanging ? 1 : 0.6
   ctx.fillStyle = COLORS.bot
@@ -287,11 +272,29 @@ function drawBot(ctx: CanvasRenderingContext2D, v: View, device: Device): string
   ctx.fill()
   ctx.stroke()
 
-  // Motors, turning with their belts
+  // Belts, over the body to where they leave the pulleys: the top inner side,
+  // the tangent points in KinematicModel.md
+  if (hanging) {
+    const q = (BOT.pulleyR * mm) / Math.SQRT2
+    ctx.lineWidth = 2
+    for (const [pin, p, motor, inward] of [
+      [0, left, m.left, 1],
+      [d, right, m.right, -1],
+    ] as const) {
+      ctx.strokeStyle = Math.abs(motor.speed) > 1 ? COLORS.beltActive : COLORS.belt
+      ctx.beginPath()
+      ctx.moveTo(sx(v, pin), sy(v, 0))
+      ctx.lineTo(p.x + inward * q, p.y - q)
+      ctx.stroke()
+    }
+  }
+
+  // Motors, turning with their belts (clockwise for positive angles on the
+  // canvas): retracting turns the left one clockwise, the right anticlockwise
   const circumference = Math.PI * m.diameter
   for (const [p, motor, sign] of [
-    [left, m.left, 1],
-    [right, m.right, -1],
+    [left, m.left, -1],
+    [right, m.right, 1],
   ] as const) {
     const r = BOT.pulleyR * mm
     ctx.fillStyle = COLORS.motor

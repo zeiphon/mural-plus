@@ -50,7 +50,7 @@ export function Shell({ device }: { device: Device }) {
             Mural Plus demo <span className="text-xs font-normal text-gray-500">{FIRMWARE_VERSION}</span>
           </h1>
           <p className="text-xs sm:text-sm text-gray-400 truncate">
-            Mural's real web UI, talking to a simulated Mural.
+            Mural's web UI, talking to a simulated Mural.
           </p>
         </div>
         <nav className="ml-auto flex shrink-0 gap-4 text-sm text-gray-400">
@@ -99,9 +99,6 @@ export function Shell({ device }: { device: Device }) {
             <iframe ref={frame} src="./app.html" title="Mural's web page" className="block w-full h-full" />
           </div>
           {!wide && <Strip device={device} active={active} onOpen={() => setTab('device')} />}
-          <p className="hidden lg:block mt-2 text-center text-xs text-gray-500">
-            Mural's own web page, as it looks on a phone
-          </p>
         </section>
 
         <section
