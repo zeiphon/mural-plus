@@ -8,3 +8,4 @@ worker/svgs/*
 .DS_Store
 .vscode/c_cpp_properties.json
 ui/tsconfig.tsbuildinfo
+tsc/dist_packed
